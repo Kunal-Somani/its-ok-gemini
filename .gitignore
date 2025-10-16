@@ -1,0 +1,14 @@
+# Ignore the virtual environment folder
+myenv/
+venv/
+
+# Ignore the secrets file
+.env
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore generated task folders
+generated_tasks/
+logs/
