@@ -1,10 +1,10 @@
-# 🤖 "its-ok-gemini" - The Autonomous Generative Agent
+#  "its-ok-gemini" - The Autonomous Generative Agent
 
 Welcome to the repository for "its-ok-gemini," an advanced project that functions as an **autonomous software development lifecycle (SDLC) agent**. This system is built to receive abstract tasks, generate all necessary code using a Large Language Model (LLM), and automatically deploy the resulting application to the internet.
 
 It's a complete **developer-in-a-box**, running as a continuous FastAPI web service inside a Docker container.
 
-## ✨ Project Goal & Capabilities
+##  Project Goal & Capabilities
 
 The primary goal is to demonstrate a fully automated pipeline where an AI system can:
 1.  **Interpret** a natural language task brief.
@@ -13,7 +13,7 @@ The primary goal is to demonstrate a fully automated pipeline where an AI system
 4.  **Deploy** the application instantly via GitHub Pages.
 5.  **Revise** and update its own deployed code based on new instructions.
 
-## ⚙️ System Architecture
+##  System Architecture
 
 The project is structured around a **FastAPI** application and leverages several external services for maximum automation.
 
@@ -25,7 +25,7 @@ The project is structured around a **FastAPI** application and leverages several
 | **GitPython** | **The Hands.** A Python library used locally to initialize repos (`git init`), clone existing repos, stage files (`git add .`), commit changes, and push updates to the remote GitHub account. | `GitPython` |
 | **Hugging Face Spaces / Docker** | **The Runtime Environment.** Provides the continuous deployment and hosting for the `main.py` service. The `Dockerfile` provides the build instructions. | Docker, Uvicorn |
 
-## 🚀 Complete Workflow: From Task to Deployment
+##  Complete Workflow: From Task to Deployment
 
 The agent operates across two distinct, multi-step workflows.
 
@@ -58,7 +58,7 @@ This process showcases the agent's ability to maintain and iteratively improve i
 | **5. Automatic Redeployment** | The push action automatically triggers the pre-configured GitHub Pages pipeline, resulting in the **instant update of the live public website** with the new changes. | **Live Site Update** |
 | **6. Revision Report** | The agent notifies the instructor server with the updated `commit_sha` and the `round: 2` flag, confirming the revision was successfully deployed. | **Revision Confirmation** |
 
-## 📦 Key Project Files and Secrets
+##  Key Project Files and Secrets
 
 | File/Component | Description | Importance |
 | :--- | :--- | :--- |
