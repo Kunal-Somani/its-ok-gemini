@@ -89,18 +89,15 @@ graph TD
     FRONTEND[React + Vite Frontend]
     FRONTEND -->|Live Logs| WS
 
-    %% Spacer nodes for bottom padding
-    SPACE1[ ]
-    SPACE2[ ]
-    SPACE3[ ]
+    %% Bottom spacing only
+    subgraph PADDING [ ]
+        PAD1[" "]
+        PAD2[" "]
+    end
 
-    GITHUB --> SPACE1
-    SPACE1 --> SPACE2
-    SPACE2 --> SPACE3
-
-    style SPACE1 fill:transparent,stroke:transparent
-    style SPACE2 fill:transparent,stroke:transparent
-    style SPACE3 fill:transparent,stroke:transparent
+    style PADDING fill:transparent,stroke:transparent
+    style PAD1 fill:transparent,stroke:transparent,color:transparent
+    style PAD2 fill:transparent,stroke:transparent,color:transparent
 ```
 
 ---
