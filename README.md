@@ -21,7 +21,7 @@ graph TD
     CLIENT[Client / Evaluator]
     API[FastAPI API Layer]
     TASKS[Task Queue & Orchestrator]
-    
+
     CLIENT -->|POST /tasks/ready| API
     API --> TASKS
 
@@ -88,6 +88,19 @@ graph TD
 
     FRONTEND[React + Vite Frontend]
     FRONTEND -->|Live Logs| WS
+
+    %% Spacer nodes for bottom padding
+    SPACE1[ ]
+    SPACE2[ ]
+    SPACE3[ ]
+
+    GITHUB --> SPACE1
+    SPACE1 --> SPACE2
+    SPACE2 --> SPACE3
+
+    style SPACE1 fill:transparent,stroke:transparent
+    style SPACE2 fill:transparent,stroke:transparent
+    style SPACE3 fill:transparent,stroke:transparent
 ```
 
 ---
@@ -111,45 +124,7 @@ graph TD
 
 # End-to-End Workflow
 
-## Round 1 — New Application Generation
-
-```text
-Task Request
-    ↓
-Authentication Validation
-    ↓
-Task Queued
-    ↓
-LLM Code Generation
-    ↓
-Repository Creation
-    ↓
-Git Commit & Push
-    ↓
-GitHub Pages Deployment
-    ↓
-Evaluator Callback
-```
-
----
-
-## Round 2 — Surgical Revision Workflow
-
-```text
-Clone Existing Repository
-    ↓
-Read Existing Code
-    ↓
-Revision Instruction
-    ↓
-LLM Surgical Update
-    ↓
-Safety Validation
-    ↓
-Commit & Push
-    ↓
-Automatic Redeployment
-```
+![Workflow Architecture](Workflow_architecture.jpeg "System Architecture Diagram")
 
 ---
 
