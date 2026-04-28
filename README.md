@@ -124,7 +124,9 @@ graph TD
 
 # End-to-End Workflow
 
-![Workflow Architecture](Workflow_architecture.jpeg "System Architecture Diagram")
+This workflow represents the complete autonomous lifecycle of the system, from task ingestion and LLM-based code generation to GitHub deployment and iterative revision updates.
+
+![Workflow Architecture](Workflow_architecture.jpeg)
 
 ---
 
