@@ -1,0 +1,131 @@
+# Docker Compose for vLLM Server (Optional - for containerized inference)
+# This file provides an isolated vLLM service for development/testing
+# 
+# Usage:
+#   docker-compose -f docker-compose.vllm.yml up -d
+#   docker-compose -f docker-compose.vllm.yml down
+#
+# Note: GPU passthrough may require additional Docker daemon configuration
+# See: https://docs.docker.com/compose/gpu-support/
+
+version: '3.9'
+
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: its-ok-gemini-vllm
+
+    # Environment configuration (all settings in one block)
+    environment:
+      - MODEL_NAME=deepseek-ai/deepseek-coder-6.7b-base
+      - GPU_MEMORY_UTILIZATION=0.9
+      - DTYPE=bfloat16
+      - TENSOR_PARALLEL_SIZE=1
+      - PORT=8000
+      - HF_TOKEN=${HF_TOKEN:-}  # Optional: Hugging Face token for private models
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+    # GPU support (requires NVIDIA Docker runtime)
+    # Uncomment the following lines if using NVIDIA GPU
+    runtime: nvidia
+    
+    # Alternative: Use resource limits (less efficient than runtime)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    
+    # Volume mounts
+    volumes:
+      # Model cache (persist downloaded models)
+      - vllm_models:/root/.cache/huggingface/hub
+      
+      # Optional: Local model directory (if pre-downloaded)
+      # - ./models/deepseek-coder-v2:/models/deepseek-coder-v2:ro
+    
+    # Port configuration
+    ports:
+      - "${VLLM_PORT:-8001}:8000"
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s  # Long startup time for model loading
+    
+    # Resource limits (optional, adjust based on GPU)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 80G
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    networks:
+      - its-ok-network
+
+volumes:
+  vllm_models:
+    driver: local
+
+networks:
+  its-ok-network:
+    driver: bridge
+
+# Usage Guide:
+#
+# 1. Install NVIDIA Docker runtime:
+#    https://github.com/NVIDIA/nvidia-docker
+#
+# 2. Allow Docker access to GPU:
+#    The docker daemon needs to be configured to use NVIDIA runtime.
+#    Create/edit /etc/docker/daemon.json:
+#    {
+#      "runtimes": {
+#        "nvidia": {
+#          "path": "nvidia-container-runtime",
+#          "runtimeArgs": []
+#        }
+#      }
+#    }
+#
+# 3. Restart Docker daemon:
+#    sudo systemctl restart docker
+#
+# 4. Start vLLM:
+#    docker-compose -f docker-compose.vllm.yml up -d
+#
+# 5. Verify it's running:
+#    curl http://localhost:8001/v1/models
+#
+# 6. Check logs:
+#    docker logs -f its-ok-gemini-vllm
+#
+# 7. Monitor GPU usage:
+#    watch -n 1 nvidia-smi
+#
+# Environment Variables:
+#
+# MODEL_NAME            Model to use (default: deepseek-ai/deepseek-coder-6.7b-base)
+# VLLM_PORT            External port (default: 8001)
+# GPU_MEMORY_UTIL      GPU memory utilization % (default: 0.9 = 90%)
+# TENSOR_PARALLEL_SIZE Number of GPUs for tensor parallelism (default: 1)
+# HF_TOKEN             Hugging Face API token for private models
+#
+# Example: Run CodeLlama-70B with multi-GPU:
+#
+#   MODEL_NAME=meta-llama/CodeLlama-70b-hf \
+#   TENSOR_PARALLEL_SIZE=2 \
+#   DTYPE=float16 \
+#   docker-compose -f docker-compose.vllm.yml up -d

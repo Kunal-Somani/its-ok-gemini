@@ -1,62 +1,62 @@
-# --------------------------------------------------------------------------------
-# Stage 1: Base Image and System Setup
-# Use a Python slim image for a smaller final container size.
-# Replace with nvidia/cuda-xx.x-cudnn-x-runtime if you require GPU access.
+# Multi-stage build for its-ok-gemini project
+# Stage 1: Build React frontend
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /frontend
+
+# Copy frontend files
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ .
+
+# Build the React app
+RUN npm run build
+
+# Stage 2: Python runtime with FastAPI and frontend
 FROM python:3.10-slim
 
-# Set up the application port. Hugging Face Spaces defaults to 7860.
-# Ensure this matches the 'app_port' value in your README.md if you change it.
-ARG APP_PORT=7860
-ENV PORT=${APP_PORT}
+# Set working directory
+WORKDIR /app
 
-# Install necessary system dependencies (e.g., C/C++ compilers for libraries like llama-cpp-python)
-# If you are using a pure PyTorch/Transformer model, you can skip the build dependencies.
-# If you run a model like Llama 3.2 via llama_cpp_python, these are essential.
-USER root
+# Install system dependencies (git for GitPython, curl for healthchecks)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     gcc \
     g++ \
-    cmake \
     git \
+    curl \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
-    
-# --------------------------------------------------------------------------------
-# Stage 2: User Setup and Environment Security
-# Create a non-root user for security best practice on Hugging Face Spaces.
-RUN useradd -m -u 1000 user
-USER user
 
-# Set environment variables for the user
-ENV HOME=/home/user
-ENV PATH="${HOME}/.local/bin:${PATH}"
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser
+USER appuser
 
-# Set the working directory for the application
-WORKDIR /app
+# Copy Python requirements
+COPY requirements.txt .
 
-# --------------------------------------------------------------------------------
-# Stage 3: Python Dependencies and Model Loading
-# Copy requirements.txt first to leverage Docker layer caching
-COPY --chown=user requirements.txt .
-
-# Install dependencies using --no-cache-dir for faster builds and smaller layers
-# You may need to add --extra-index-url if using custom package repositories
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# If you are downloading a large model, this is where you would do it.
-# E.g., via huggingface_hub or cloning a repo.
+# Copy application code
+COPY --chown=appuser:appuser app/ ./app/
+COPY --chown=appuser:appuser migrations/ ./migrations/
+COPY --chown=appuser:appuser alembic.ini .
 
-# --------------------------------------------------------------------------------
-# Stage 4: Application Code and Startup
-# Copy the application code (FastAPI/Flask app) and necessary files
-# --chown=user ensures the non-root user owns these files.
-COPY --chown=user . .
+# Copy built frontend from stage 1
+COPY --chown=appuser:appuser --from=frontend-builder /frontend/dist ./frontend/dist
 
-# Expose the application port (matching the ENV PORT above and the README.md)
-EXPOSE ${APP_PORT}
+# Create a simple FastAPI app to serve static files
+RUN mkdir -p /app/static && \
+    if [ -d /app/frontend/dist ]; then cp -r /app/frontend/dist/* /app/static/ 2>/dev/null || true; fi
 
-# Define the command to run the application (assuming your entry file is main.py)
-# This example uses Uvicorn to run a FastAPI app named 'app' in main.py.
-# Replace 'main:app' with 'your_file_name:app' if your entry file is different.
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
+# Expose port
+EXPOSE 8000
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run the FastAPI application
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
