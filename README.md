@@ -1,117 +1,117 @@
 # its-ok-gemini
 
-Autonomous AI SDLC agent that can:
+Autonomous AI SDLC agent capable of generating, revising, deploying, and maintaining applications completely through LLM-driven workflows.
 
-- Generate full applications from prompts
-- Create and manage GitHub repositories
-- Push commits automatically
-- Deploy instantly using GitHub Pages
-- Revise existing projects through iterative prompts
-
----
-
-# Core Features
-
-- FastAPI async backend
-- Autonomous GitHub automation
-- vLLM + Gemini backend support
-- RAG-based context retrieval
-- Real-time WebSocket logs
-- Prometheus metrics
-- OpenTelemetry tracing
-- Dockerized deployment
-- Multi-round code revision pipeline
+The system handles:
+- Code generation
+- Repository automation
+- Git operations
+- GitHub Pages deployment
+- Multi-round revisions
+- RAG-assisted context retrieval
+- Real-time orchestration monitoring
 
 ---
 
-# System Architecture
+# Architecture
 
-## High-Level Architecture Tree
+```mermaid
+graph TD
 
-```text
-its-ok-gemini/
-│
-├── API Layer
-│   ├── FastAPI Server
-│   ├── REST Endpoints
-│   └── WebSocket Log Streaming
-│
-├── Orchestration Layer
-│   ├── Task Pipeline
-│   ├── Background Workers
-│   ├── Safety Gates
-│   └── Deployment Lifecycle
-│
-├── LLM Layer
-│   ├── vLLM Backend
-│   │   ├── DeepSeek-Coder
-│   │   └── CodeLlama
-│   │
-│   └── Gemini Fallback Backend
-│
-├── RAG Layer
-│   ├── Dense Retrieval
-│   │   ├── all-MiniLM-L6-v2
-│   │   └── Qdrant Vector DB
-│   │
-│   ├── Sparse Retrieval
-│   │   └── BM25
-│   │
-│   └── Context Chunking Engine
-│
-├── GitHub Automation
-│   ├── Repo Creation
-│   ├── Clone & Pull
-│   ├── Commit & Push
-│   └── GitHub Pages Deployment
-│
-├── Persistence Layer
-│   ├── PostgreSQL
-│   ├── SQLAlchemy Async ORM
-│   └── Alembic Migrations
-│
-├── Observability
-│   ├── Prometheus Metrics
-│   ├── Structured Logging
-│   ├── OpenTelemetry Tracing
-│   └── Real-Time Logs
-│
-├── Infrastructure
-│   ├── Docker
-│   ├── Docker Compose
-│   ├── Prometheus
-│   └── vLLM Runtime
-│
-└── Frontend
-    ├── Vite + React
-    ├── Task Monitoring UI
-    └── Live Log Streaming
+    CLIENT[Client / Evaluator]
+    API[FastAPI API Layer]
+    TASKS[Task Queue & Orchestrator]
+    
+    CLIENT -->|POST /tasks/ready| API
+    API --> TASKS
+
+    subgraph ORCHESTRATION [Task Orchestration Pipeline]
+        ANALYZE[Analyze Task]
+        GENERATE[LLM Code Generation]
+        SAFETY[Safety Gate Validation]
+        DEPLOY[Git Push + Deployment]
+
+        ANALYZE --> GENERATE
+        GENERATE --> SAFETY
+        SAFETY --> DEPLOY
+    end
+
+    TASKS --> ANALYZE
+
+    subgraph LLM [LLM Layer]
+        VLLM[vLLM Backend<br/>DeepSeek-Coder / CodeLlama]
+        GEMINI[Gemini Fallback Backend]
+    end
+
+    GENERATE --> VLLM
+    GENERATE --> GEMINI
+
+    subgraph RAG [Hybrid RAG Engine]
+        DENSE[Dense Retrieval<br/>all-MiniLM-L6-v2 + Qdrant]
+        SPARSE[Sparse Retrieval<br/>Boilerplate + Semantic Matching]
+        CHUNK[Chunking Engine]
+
+        CHUNK --> DENSE
+        CHUNK --> SPARSE
+    end
+
+    GENERATE --> RAG
+
+    subgraph GITHUB [GitHub Automation]
+        REPO[Repository Creation]
+        GIT[Clone / Commit / Push]
+        PAGES[GitHub Pages Deployment]
+
+        REPO --> GIT
+        GIT --> PAGES
+    end
+
+    DEPLOY --> GITHUB
+
+    subgraph STORAGE [Persistence Layer]
+        POSTGRES[(PostgreSQL)]
+        SQLA[SQLAlchemy Async ORM]
+    end
+
+    API --> STORAGE
+    TASKS --> STORAGE
+
+    subgraph OBSERVABILITY [Observability]
+        WS[WebSocket Logs]
+        PROM[Prometheus Metrics]
+        TRACE[OpenTelemetry Tracing]
+    end
+
+    TASKS --> WS
+    TASKS --> PROM
+    TASKS --> TRACE
+
+    FRONTEND[React + Vite Frontend]
+    FRONTEND -->|Live Logs| WS
 ```
 
 ---
 
-## Component Architecture
+# System Components
 
 | Component | Role | Stack |
-| :--- | :--- | :--- |
-| `FastAPI` | API server and orchestration entrypoint | FastAPI, asyncio |
-| `Task Orchestrator` | Handles generation → git → deployment lifecycle | Async Workers |
-| `vLLM Service` | Primary local/self-hosted inference backend | vLLM |
-| `Gemini Service` | Fallback cloud inference backend | Gemini API |
-| `RAG Engine` | Retrieval-augmented context system | Qdrant, SentenceTransformers |
-| `GitHub Service` | Repository + deployment automation | GitHub API |
-| `GitPython` | Local git operations | GitPython |
-| `PostgreSQL` | Persistent task storage | SQLAlchemy |
-| `Prometheus` | Metrics collection | Prometheus |
-| `WebSocket Logs` | Real-time orchestration monitoring | FastAPI WS |
-| `Frontend` | Dashboard and monitoring UI | React, Vite |
-| `Docker` | Containerized deployment | Docker |
+|---|---|---|
+| FastAPI API Layer | Request handling and orchestration entrypoint | FastAPI, asyncio |
+| Task Orchestrator | Executes generation → deployment lifecycle | Async Workers |
+| vLLM Backend | Primary self-hosted inference engine | vLLM |
+| Gemini Backend | Cloud fallback generation backend | Gemini API |
+| Hybrid RAG Engine | Retrieval-assisted context generation | Qdrant, SentenceTransformers |
+| GitHub Automation | Repo creation and deployment management | GitHub API, GitPython |
+| Persistence Layer | Task storage and lifecycle tracking | PostgreSQL, SQLAlchemy |
+| Observability Layer | Metrics, logs, traces | Prometheus, OpenTelemetry |
+| Frontend Dashboard | Monitoring and live logs UI | React, Vite |
+| Infrastructure | Containerized runtime | Docker, Docker Compose |
 
 ---
 
 # End-to-End Workflow
 
-## Round 1 — New Project Generation
+## Round 1 — New Application Generation
 
 ```text
 Task Request
@@ -124,8 +124,6 @@ LLM Code Generation
     ↓
 Repository Creation
     ↓
-Files Written
-    ↓
 Git Commit & Push
     ↓
 GitHub Pages Deployment
@@ -135,14 +133,14 @@ Evaluator Callback
 
 ---
 
-## Round 2 — Surgical Revision
+## Round 2 — Surgical Revision Workflow
 
 ```text
-Existing Repo Clone
+Clone Existing Repository
     ↓
 Read Existing Code
     ↓
-Revision Prompt
+Revision Instruction
     ↓
 LLM Surgical Update
     ↓
@@ -194,52 +192,58 @@ tests/
 
 ---
 
-# API Endpoints
-
-| Endpoint | Method | Purpose |
-| :--- | :--- | :--- |
-| `/api/v1/tasks/ready` | POST | Create generation task |
-| `/api/v1/tasks` | GET | Retrieve task history |
-| `/metrics` | GET | Prometheus metrics |
-| `/ws/logs` | WS | Live log streaming |
-| `/health` | GET | Health check |
-
----
-
 # Models Used
 
 | Model | Role |
-| :--- | :--- |
+|---|---|
 | DeepSeek-Coder-V2 | Primary code generation |
 | CodeLlama-70B | Alternate vLLM backend |
-| Gemini 2.0 Flash | Cloud fallback |
-| all-MiniLM-L6-v2 | Embeddings for RAG |
+| Gemini 2.0 Flash | Fallback cloud generation |
+| all-MiniLM-L6-v2 | Embeddings for semantic retrieval |
+
+---
+
+# API Endpoints
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/v1/tasks/ready` | POST | Create generation task |
+| `/api/v1/tasks` | GET | Retrieve task history |
+| `/metrics` | GET | Prometheus metrics |
+| `/ws/logs` | WS | Live orchestration logs |
+| `/health` | GET | Service health check |
 
 ---
 
 # Infrastructure
 
 | Service | Purpose |
-| :--- | :--- |
+|---|---|
 | Docker | Container runtime |
 | Docker Compose | Multi-service orchestration |
-| Qdrant | Vector database |
 | PostgreSQL | Persistent storage |
+| Qdrant | Vector database |
 | Prometheus | Metrics monitoring |
 | vLLM | Local inference serving |
 
 ---
 
-# Key Engineering Highlights
+# Key Engineering Decisions
 
-- Async-first architecture
-- Autonomous deployment pipeline
-- LLM backend abstraction
-- Graceful RAG degradation
-- Structured observability
-- GitHub App authentication
-- Safety-gated revisions
-- Real-time operational visibility
+**vLLM over direct cloud-only inference:**  
+Supports local/self-hosted inference, lower latency, lower operational cost, and backend flexibility through OpenAI-compatible APIs.
+
+**Safety-Gated Revision Pipeline:**  
+Prevents destructive LLM rewrites by validating generated code shrinkage before deployment.
+
+**Hybrid Retrieval Architecture:**  
+Combines semantic retrieval with structured boilerplate retrieval to improve contextual generation quality.
+
+**Async-first orchestration:**  
+All critical operations including database access, HTTP calls, git automation, and inference requests operate asynchronously for better scalability.
+
+**GitHub App Authentication over PATs:**  
+Uses installation access tokens with scoped permissions instead of long-lived personal access tokens.
 
 ---
 
@@ -267,7 +271,7 @@ STUDENT_SECRET=
 
 ---
 
-# Run Locally
+# Quick Start
 
 ## Backend
 
