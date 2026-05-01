@@ -1,0 +1,32 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Deploy to Render
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          # Trigger deploy via Render API
+          echo "Deploying to Render..."
+          # Replace <service-id> with actual Render service ID
+          # curl -X POST https://api.render.com/v1/services/<service-id>/deploys \
+          #   -H "Authorization: Bearer $RENDER_API_KEY"
+            
+      - name: Post-deploy Alembic upgrade
+        run: |
+          echo "Running post-deploy hook to upgrade DB schema..."
+          # In a real environment, you might use Render's pre-deploy hooks or execute this remotely:
+          # ssh user@host "cd /app && docker-compose exec -T api alembic upgrade head"

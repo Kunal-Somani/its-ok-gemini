@@ -1,281 +1,78 @@
-# its-ok-gemini
-
-Autonomous AI SDLC agent capable of generating, revising, deploying, and maintaining applications completely through LLM-driven workflows.
-
-The system handles:
-- Code generation
-- Repository automation
-- Git operations
-- GitHub Pages deployment
-- Multi-round revisions
-- RAG-assisted context retrieval
-- Real-time orchestration monitoring
-
----
-
-# Architecture
-
-```mermaid
-graph TD
-
-    CLIENT[Client / Evaluator]
-    API[FastAPI API Layer]
-    TASKS[Task Queue & Orchestrator]
-
-    CLIENT -->|POST /tasks/ready| API
-    API --> TASKS
-
-    subgraph ORCHESTRATION [Task Orchestration Pipeline]
-        ANALYZE[Analyze Task]
-        GENERATE[LLM Code Generation]
-        SAFETY[Safety Gate Validation]
-        DEPLOY[Git Push + Deployment]
-
-        ANALYZE --> GENERATE
-        GENERATE --> SAFETY
-        SAFETY --> DEPLOY
-    end
-
-    TASKS --> ANALYZE
-
-    subgraph LLM [LLM Layer]
-        VLLM[vLLM Backend<br/>DeepSeek-Coder / CodeLlama]
-        GEMINI[Gemini Fallback Backend]
-    end
-
-    GENERATE --> VLLM
-    GENERATE --> GEMINI
-
-    subgraph RAG [Hybrid RAG Engine]
-        DENSE[Dense Retrieval<br/>all-MiniLM-L6-v2 + Qdrant]
-        SPARSE[Sparse Retrieval<br/>Boilerplate + Semantic Matching]
-        CHUNK[Chunking Engine]
-
-        CHUNK --> DENSE
-        CHUNK --> SPARSE
-    end
-
-    GENERATE --> RAG
-
-    subgraph GITHUB [GitHub Automation]
-        REPO[Repository Creation]
-        GIT[Clone / Commit / Push]
-        PAGES[GitHub Pages Deployment]
-
-        REPO --> GIT
-        GIT --> PAGES
-    end
-
-    DEPLOY --> GITHUB
-
-    subgraph STORAGE [Persistence Layer]
-        POSTGRES[(PostgreSQL)]
-        SQLA[SQLAlchemy Async ORM]
-    end
-
-    API --> STORAGE
-    TASKS --> STORAGE
-
-    subgraph OBSERVABILITY [Observability]
-        WS[WebSocket Logs]
-        PROM[Prometheus Metrics]
-        TRACE[OpenTelemetry Tracing]
-    end
-
-    TASKS --> WS
-    TASKS --> PROM
-    TASKS --> TRACE
-
-    FRONTEND[React + Vite Frontend]
-    FRONTEND -->|Live Logs| WS
-
-    %% Bottom spacing only
-    subgraph PADDING [ ]
-        PAD1[" "]
-        PAD2[" "]
-    end
-
-    style PADDING fill:transparent,stroke:transparent
-    style PAD1 fill:transparent,stroke:transparent,color:transparent
-    style PAD2 fill:transparent,stroke:transparent,color:transparent
-```
-
----
-
-# System Components
-
-| Component | Role | Stack |
-|---|---|---|
-| FastAPI API Layer | Request handling and orchestration entrypoint | FastAPI, asyncio |
-| Task Orchestrator | Executes generation → deployment lifecycle | Async Workers |
-| vLLM Backend | Primary self-hosted inference engine | vLLM |
-| Gemini Backend | Cloud fallback generation backend | Gemini API |
-| Hybrid RAG Engine | Retrieval-assisted context generation | Qdrant, SentenceTransformers |
-| GitHub Automation | Repo creation and deployment management | GitHub API, GitPython |
-| Persistence Layer | Task storage and lifecycle tracking | PostgreSQL, SQLAlchemy |
-| Observability Layer | Metrics, logs, traces | Prometheus, OpenTelemetry |
-| Frontend Dashboard | Monitoring and live logs UI | React, Vite |
-| Infrastructure | Containerized runtime | Docker, Docker Compose |
-
----
-
-# End-to-End Workflow
-
-This workflow represents the complete autonomous lifecycle of the system, from task ingestion and LLM-based code generation to GitHub deployment and iterative revision updates.
-
-![Workflow Architecture](Workflow_architecture.jpeg)
-
----
-
-# Project Structure
-
-```text
-app/
-├── api/
-│   ├── v1/
-│   │   ├── tasks.py
-│   │   └── metrics.py
-│   └── websocket.py
-│
-├── core/
-│   ├── config.py
-│   └── logging.py
-│
-├── db/
-│   └── session.py
-│
-├── models/
-│   ├── base.py
-│   └── task.py
-│
-├── services/
-│   ├── github_service.py
-│   ├── llm_service.py
-│   └── rag_service.py
-│
-├── workers/
-│   └── orchestrator.py
-│
-└── main.py
-
-frontend/
-infra/
-migrations/
-tests/
-```
-
----
-
-# Models Used
-
-| Model | Role |
-|---|---|
-| DeepSeek-Coder-V2 | Primary code generation |
-| CodeLlama-70B | Alternate vLLM backend |
-| Gemini 2.0 Flash | Fallback cloud generation |
-| all-MiniLM-L6-v2 | Embeddings for semantic retrieval |
-
----
-
-# API Endpoints
-
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/api/v1/tasks/ready` | POST | Create generation task |
-| `/api/v1/tasks` | GET | Retrieve task history |
-| `/metrics` | GET | Prometheus metrics |
-| `/ws/logs` | WS | Live orchestration logs |
-| `/health` | GET | Service health check |
-
----
-
-# Infrastructure
-
-| Service | Purpose |
-|---|---|
-| Docker | Container runtime |
-| Docker Compose | Multi-service orchestration |
-| PostgreSQL | Persistent storage |
-| Qdrant | Vector database |
-| Prometheus | Metrics monitoring |
-| vLLM | Local inference serving |
-
----
-
-# Key Engineering Decisions
-
-**vLLM over direct cloud-only inference:**  
-Supports local/self-hosted inference, lower latency, lower operational cost, and backend flexibility through OpenAI-compatible APIs.
-
-**Safety-Gated Revision Pipeline:**  
-Prevents destructive LLM rewrites by validating generated code shrinkage before deployment.
-
-**Hybrid Retrieval Architecture:**  
-Combines semantic retrieval with structured boilerplate retrieval to improve contextual generation quality.
-
-**Async-first orchestration:**  
-All critical operations including database access, HTTP calls, git automation, and inference requests operate asynchronously for better scalability.
-
-**GitHub App Authentication over PATs:**  
-Uses installation access tokens with scoped permissions instead of long-lived personal access tokens.
-
----
-
-# Environment Variables
-
-```env
-DATABASE_URL=
-DATABASE_SYNC_URL=
-
-GITHUB_USERNAME=
-GITHUB_APP_ID=
-GITHUB_PRIVATE_KEY_B64=
-
-LLM_BACKEND=
-VLLM_ENDPOINT=
-VLLM_MODEL=
-
-GEMINI_API_KEY=
-
-QDRANT_URL=
-QDRANT_API_KEY=
-
-STUDENT_SECRET=
-```
-
----
-
-# Quick Start
-
-## Backend
-
-```bash
-docker compose up --build
-```
-
----
-
-## Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
----
-
-# Tech Stack
-
-- FastAPI
-- PostgreSQL
-- SQLAlchemy
-- Qdrant
-- SentenceTransformers
-- vLLM
-- Gemini API
-- GitPython
-- Prometheus
-- OpenTelemetry
-- React
-- Docker
+# ⚡ Agent Command Center
+
+![Banner](https://via.placeholder.com/1200x300.png?text=Agent+Command+Center)
+
+> **Autonomous AI code generation agent — generates, deploys, and iterates on web projects via GitHub Pages.**
+
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
+![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)
+![Anthropic](https://img.shields.io/badge/Anthropic-black?style=for-the-badge&logo=anthropic&logoColor=white)
+![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
+
+## 📌 Architecture
+
+See the [Architecture Diagram](docs/ARCHITECTURE.md) for more info.
+
+## 🚀 Quick Start
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/yourusername/agent-command-center.git
+   cd agent-command-center
+   ```
+
+2. **Configure environment:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your keys (GitHub, Anthropic, etc.)
+   ```
+
+3. **Start the backend:**
+   ```bash
+   docker-compose up -d
+   ```
+
+4. **Start the frontend (development):**
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+5. **Submit a task:**
+   ```bash
+   curl -X POST http://localhost:8000/api/v1/tasks/ready \
+     -H "X-Api-Key: your_api_key_here" \
+     -H "Content-Type: application/json" \
+     -d '{"task_name": "My App", "email": "me@example.com", "nonce": "abc12345", "instruction": "Build a react app"}'
+   ```
+
+## 📚 API Reference
+
+| Endpoint | Method | Auth | Request Body | Response |
+|----------|--------|------|--------------|----------|
+| `/api/v1/tasks/ready` | `POST` | `X-Api-Key` | `{task_name, email, nonce, instruction}` | `201 Created` - Task info |
+| `/api/v1/tasks` | `GET` | `X-Api-Key` | N/A | `200 OK` - List of tasks |
+| `/api/v1/tasks/{id}` | `GET` | `X-Api-Key` | N/A | `200 OK` - Task details |
+| `/api/v1/tasks/{id}` | `DELETE`| `X-Api-Key` | N/A | `204 No Content` |
+| `/ws/logs` | `WS` | N/A | N/A (Connect) | Live WebSocket Log Stream |
+
+For more details, see [API.md](docs/API.md).
+
+## ⚙️ Environment Variables
+
+| Name | Required | Default | Description |
+|------|----------|---------|-------------|
+| `API_KEY` | ✅ | `""` | Master API Key for Auth |
+| `ANTHROPIC_API_KEY` | ✅ | `""` | Claude API key |
+| `COHERE_API_KEY` | ✅ | `""` | Cohere API key for embeddings |
+| `DB_USER` / `DB_PASSWORD` | ❌ | `postgres` | Postgres credentials |
+| `REDIS_URL` | ❌ | `redis://...` | Redis Pub/Sub backend |
+| `GITHUB_APP_ID` | ✅ | `""` | GitHub app integration ID |
+
+## 🤝 Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to get started!
+
+## 📄 License
+This project is licensed under the MIT License.
