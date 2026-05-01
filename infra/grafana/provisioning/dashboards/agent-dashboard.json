@@ -1,0 +1,53 @@
+{
+  "title": "Agent Command Center",
+  "uid": "agent-dashboard-1",
+  "refresh": "5s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Active Tasks",
+      "targets": [{"expr": "sum(task_status_count{status=~\"QUEUED|ANALYZING|GENERATING|DEPLOYING\"})"}]
+    },
+    {
+      "type": "piechart",
+      "title": "Tasks by Status",
+      "targets": [{"expr": "task_status_count"}],
+      "options": {
+        "pieType": "donut"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Task Processing Duration (Percentiles)",
+      "targets": [
+        {"expr": "histogram_quantile(0.99, sum(rate(task_processing_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99"},
+        {"expr": "histogram_quantile(0.95, sum(rate(task_processing_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.50, sum(rate(task_processing_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "LLM Token Usage",
+      "targets": [{"expr": "rate(llm_tokens_total[5m])"}],
+      "options": {
+        "custom": {
+          "fillOpacity": 20
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "API Request Rate",
+      "targets": [{"expr": "sum(rate(http_requests_total[5m])) by (path, method)"}],
+      "options": {
+        "custom": {
+          "fillOpacity": 10
+        }
+      }
+    }
+  ]
+}

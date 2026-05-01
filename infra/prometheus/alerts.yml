@@ -1,0 +1,29 @@
+groups:
+  - name: agent_alerts
+    rules:
+      - alert: HighTaskFailureRate
+        expr: sum(rate(task_status_count{status="FAILED"}[5m])) / sum(rate(task_status_count[5m])) > 0.2
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High Task Failure Rate (>20%)"
+          description: "Over 20% of tasks have failed in the last 5 minutes."
+          
+      - alert: NoSuccessfulTasks
+        expr: sum(increase(task_status_count{status="SUCCESS"}[30m])) == 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No successful tasks in the last 30 minutes"
+          description: "No tasks have completed successfully in the last 30 minutes. This might indicate a stall."
+          
+      - alert: HighLLMTokenUsage
+        expr: rate(llm_tokens_total[5m]) > 100000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM Token usage is excessively high"
+          description: "The rate of LLM token usage is exceeding 100,000 per 5 minutes."
