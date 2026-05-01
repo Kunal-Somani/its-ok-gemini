@@ -1,45 +1,26 @@
 import asyncio
-import os
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-import aiofiles
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from typing import Optional
+from app.core.redis import get_redis
 
 router = APIRouter()
 
-LOG_FILE_PATH = "app.log"
-
-async def _tail_log_file(filepath: str):
-    """
-    Asynchronously tail a log file line by line.
-    Never blocks the event loop.
-    """
-    # Ensure file exists
-    if not os.path.exists(filepath):
-        async with aiofiles.open(filepath, 'a'):
-            pass
-
-    async with aiofiles.open(filepath, "r") as f:
-        # Seek to end to act as `tail -f`
-        await f.seek(0, os.SEEK_END)
-
-        while True:
-            line = await f.readline()
-            if not line:
-                # No new data, wait before checking again
-                await asyncio.sleep(0.1)
-                continue
-            yield line
-
 @router.websocket("/ws/logs")
-async def websocket_logs(websocket: WebSocket):
-    """Log-tailing service streaming `app.log` straight to the frontend."""
+async def websocket_logs(websocket: WebSocket, task_id: Optional[str] = Query(None)):
+    """Real-time log streaming using Redis Pub/Sub."""
     await websocket.accept()
-
+    redis = await get_redis()
+    pubsub = redis.pubsub()
+    
+    channel = f"task:logs:{task_id}" if task_id else "task:logs"
+    await pubsub.subscribe(channel)
     try:
-        # Use async generator to tail logs without blocking event loop
-        async for line in _tail_log_file(LOG_FILE_PATH):
-            await websocket.send_text(line)
+        async for message in pubsub.listen():
+            if message["type"] == "message":
+                await websocket.send_text(message["data"])
     except WebSocketDisconnect:
-        # Standard closing disconnection by frontend
         pass
     except Exception as e:
         await websocket.close(reason=str(e))
+    finally:
+        await pubsub.unsubscribe(channel)

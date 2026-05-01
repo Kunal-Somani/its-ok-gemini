@@ -77,7 +77,6 @@ async def get_metrics(db: AsyncSession = Depends(get_db)):
 
         for status, count in result.all():
             task_success_gauge.labels(status=status.value).set(count)
-            task_status_counter.labels(status=status.value).inc(count)
 
         logger.info("task_metrics_updated")
     except Exception as e:

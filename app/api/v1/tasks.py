@@ -1,6 +1,7 @@
 import uuid
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -10,6 +11,7 @@ from app.db.session import get_db
 from app.models.task import TaskRecord, TaskStatus
 from app.workers.orchestrator import orchestrator
 from app.core.config import settings
+from app.core.security import get_api_key, limiter
 
 router = APIRouter()
 
@@ -19,7 +21,6 @@ class TaskCreate(BaseModel):
     round_index: int = Field(default=1, ge=1)
     nonce: str = Field(..., min_length=5, description="Idempotency key to prevent duplicate submissions")
     instruction: str = Field(..., min_length=5)
-    secret: str = Field(..., description="Secret key for authentication")
     attachments: Optional[List[Dict[str, Any]]] = None
 
 class TaskResponse(BaseModel):
@@ -29,30 +30,27 @@ class TaskResponse(BaseModel):
     email: str
     round_index: int
     nonce: str
+    pages_url: Optional[str] = None
+    repo_url: Optional[str] = None
+    commit_sha: Optional[str] = None
+    completed_at: Optional[datetime] = None
+    duration_seconds: Optional[float] = None
 
     model_config = {"from_attributes": True}
 
-def _verify_secret(secret: str) -> None:
-    """Verify that the provided secret matches the STUDENT_SECRET.
-
-    Args:
-        secret: The secret key provided in the request
-
-    Raises:
-        HTTPException: If the secret does not match
-    """
-    if secret != settings.STUDENT_SECRET:
-        raise HTTPException(status_code=401, detail="Invalid authentication secret")
-
-@router.post("/tasks/ready", response_model=TaskResponse)
+@router.post("/tasks/ready", response_model=TaskResponse, status_code=201, tags=["tasks"])
+@limiter.limit("10/minute")
 async def create_task(
+    request: Request,
     task_in: TaskCreate,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key)
 ):
-    # 0. Verify authentication secret
-    _verify_secret(task_in.secret)
-
+    """
+    Create a new autonomous task.
+    Returns 201 if a new task is created, or 200 with the existing task if the nonce matches.
+    """
     # 1. Idempotency Check
     stmt = select(TaskRecord).where(TaskRecord.nonce == task_in.nonce)
     result = await db.execute(stmt)
@@ -87,18 +85,59 @@ async def create_task(
 
     return new_task
 
-@router.get("/tasks", response_model=List[TaskResponse])
+@router.get("/tasks", response_model=List[TaskResponse], tags=["tasks"])
 async def get_tasks(
     status: Optional[TaskStatus] = Query(None, description="Filter tasks by status"),
+    task_name_contains: Optional[str] = Query(None, description="Search task name"),
+    after_id: Optional[uuid.UUID] = Query(None, description="Cursor pagination"),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key)
 ):
     """Retrieve historical tasks with pagination and status filtering."""
     stmt = select(TaskRecord).order_by(TaskRecord.created_at.desc())
     if status:
         stmt = stmt.where(TaskRecord.status == status)
+    if task_name_contains:
+        stmt = stmt.where(TaskRecord.task_name.ilike(f"%{task_name_contains}%"))
         
-    stmt = stmt.limit(limit).offset(offset)
+    if after_id:
+        cursor_task = await db.get(TaskRecord, after_id)
+        if cursor_task:
+            stmt = stmt.where(TaskRecord.created_at < cursor_task.created_at)
+    else:
+        stmt = stmt.offset(offset)
+        
+    stmt = stmt.limit(limit)
     result = await db.execute(stmt)
     return result.scalars().all()
+
+@router.get("/tasks/{task_id}", response_model=TaskResponse, tags=["tasks"])
+async def get_task(
+    task_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key)
+):
+    """Retrieve details for a specific task by ID."""
+    task = await db.get(TaskRecord, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+@router.delete("/tasks/{task_id}", status_code=204, tags=["tasks"])
+async def delete_task(
+    task_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    api_key: str = Depends(get_api_key)
+):
+    """Cancel an ongoing task or mark it as FAILED."""
+    task = await db.get(TaskRecord, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+        
+    if task.status not in (TaskStatus.SUCCESS, TaskStatus.FAILED):
+        task.status = TaskStatus.FAILED
+        task.error_log = "Cancelled by user"
+        await db.commit()
+    return None

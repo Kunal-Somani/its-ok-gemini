@@ -2,6 +2,7 @@ import logging
 import structlog
 import sys
 from app.core.config import settings
+from app.core.log_publisher import RedisLogPublisher
 
 def setup_logging():
     # Set the logging level based on the environment
@@ -22,6 +23,7 @@ def setup_logging():
             structlog.stdlib.add_logger_name,
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.dict_tracebacks,
+            RedisLogPublisher(),
             structlog.processors.JSONRenderer(),
         ]
     else:
@@ -30,6 +32,7 @@ def setup_logging():
             structlog.stdlib.add_log_level,
             structlog.stdlib.add_logger_name,
             structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
+            RedisLogPublisher(),
             structlog.dev.ConsoleRenderer(colors=True),
         ]
 
