@@ -1,9 +1,10 @@
 fastapi
+slowapi>=0.1.9
 uvicorn[standard]
 sqlalchemy[asyncio]
 asyncpg
 alembic
-redis
+redis[asyncio]>=5.0.0
 httpx
 aiofiles
 GitPython
@@ -15,13 +16,11 @@ pydantic-settings
 tenacity
 python-jose[cryptography]
 
-# LLM & vLLM Integration
-transformers>=4.40.0
-tokenizers>=0.15.0
-torch>=2.1.0
+# LLM Integration
+anthropic>=0.40.0
 
 # RAG & Vector Embeddings
 langchain>=0.1.0
 langchain-community>=0.0.10
-sentence-transformers>=2.2.0
+cohere>=5.0.0
 qdrant-client>=2.7.0
