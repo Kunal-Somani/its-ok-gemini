@@ -1,6 +1,9 @@
 import os
 import uuid
 from typing import List, Dict, Any, Optional
+from datetime import datetime, timezone
+
+from app.api.v1.metrics import task_status_counter, task_processing_duration
 
 import httpx
 import structlog
@@ -135,20 +138,26 @@ class TaskOrchestrator:
         attachments: Optional[List[Dict[str, Any]]] = None
     ) -> None:
         """Main orchestrator lifecycle."""
+        structlog.contextvars.bind_contextvars(task_id=str(task_id))
         with tracer.start_as_current_span("orchestrator_pipeline") as pipeline_span:
             pipeline_span.set_attribute("task.id", str(task_id))
             
             async with AsyncSessionLocal() as session:
                 # 1. Fetch Task
-                with tracer.start_as_current_span("fetch_task"):
+                with tracer.start_as_current_span("task.analyze") as analyze_span:
                     task = await session.get(TaskRecord, task_id)
                     if not task:
                         logger.error("task_not_found", task_id=str(task_id))
                         return
+                    analyze_span.set_attribute("task.id", str(task_id))
+                    analyze_span.set_attribute("task.name", task.task_name)
+                    analyze_span.set_attribute("task.round_index", task.round_index)
+                    analyze_span.add_event("status_transition", {"status": "ANALYZING"})
                     
                     # Update Status
                     task.status = TaskStatus.ANALYZING
                     await session.commit()
+                    task_status_counter.labels(status=task.status.value).inc()
                     
                 repo_name = f"gen-{task.nonce}"
                 
@@ -181,8 +190,13 @@ class TaskOrchestrator:
                         # 3. Call LLM
                         task.status = TaskStatus.GENERATING
                         await session.commit()
+                        task_status_counter.labels(status=task.status.value).inc()
                         
-                        with tracer.start_as_current_span("llm_generation"):
+                        with tracer.start_as_current_span("task.generate") as generate_span:
+                            generate_span.set_attribute("task.id", str(task_id))
+                            generate_span.set_attribute("task.name", task.task_name)
+                            generate_span.set_attribute("task.round_index", task.round_index)
+                            generate_span.add_event("status_transition", {"status": "GENERATING"})
                             llm_result = await llm_service.generate_code(
                                 instruction=instruction,
                                 round_index=task.round_index,
@@ -209,8 +223,12 @@ class TaskOrchestrator:
                         # 6. Push to Git
                         task.status = TaskStatus.DEPLOYING
                         await session.commit()
+                        task_status_counter.labels(status=task.status.value).inc()
 
-                        with tracer.start_as_current_span("git_push"):
+                        with tracer.start_as_current_span("task.deploy") as deploy_span:
+                            deploy_span.set_attribute("task.id", str(task_id))
+                            deploy_span.set_attribute("task.name", task.task_name)
+                            deploy_span.add_event("status_transition", {"status": "DEPLOYING"})
                             git_manager.add_all()
                             git_manager.commit(message=f"feat: Round {task.round_index} automated updates")
                             git_manager.push()
@@ -230,13 +248,23 @@ class TaskOrchestrator:
                             
                         # Complete
                         task.status = TaskStatus.SUCCESS
+                        task.completed_at = datetime.now(timezone.utc)
+                        if task.created_at:
+                            task.duration_seconds = (task.completed_at - task.created_at).total_seconds()
+                            task_processing_duration.labels(status=task.status.value).observe(task.duration_seconds)
                         await session.commit()
+                        task_status_counter.labels(status=task.status.value).inc()
                         logger.info("task_completed_successfully", task_id=str(task_id))
                         
                 except Exception as e:
                     task.status = TaskStatus.FAILED
                     task.error_log = str(e)
+                    task.completed_at = datetime.now(timezone.utc)
+                    if task.created_at:
+                        task.duration_seconds = (task.completed_at - task.created_at).total_seconds()
+                        task_processing_duration.labels(status=task.status.value).observe(task.duration_seconds)
                     await session.commit()
+                    task_status_counter.labels(status=task.status.value).inc()
                     logger.error("task_failed", task_id=str(task_id), error=str(e))
                     raise
 

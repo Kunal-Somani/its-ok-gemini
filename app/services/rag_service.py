@@ -17,7 +17,7 @@ from datetime import datetime
 import hashlib
 
 import structlog
-from sentence_transformers import SentenceTransformer
+import cohere
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 
@@ -66,7 +66,7 @@ class RAGService:
 
     def __init__(self):
         """Initialize RAG service with embeddings and Qdrant client."""
-        self.embedding_model: Optional[SentenceTransformer] = None
+        self.cohere_client: Optional[cohere.AsyncClient] = None
         self.qdrant_client: Optional[AsyncQdrantClient] = None
         self.collection_name = "code_context"
         self.embedding_dim = settings.RAG_VECTOR_DIMENSION
@@ -90,25 +90,16 @@ class RAGService:
         initialization_failed = False
 
         try:
-            # Load embedding model on a thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
-            self.embedding_model = await loop.run_in_executor(
-                None,
-                lambda: SentenceTransformer(settings.EMBEDDING_MODEL)
-            )
-            logger.info(
-                "embedding_model_loaded",
-                model=settings.EMBEDDING_MODEL,
-                dimension=self.embedding_dim
-            )
+            self.cohere_client = cohere.AsyncClient(api_key=settings.COHERE_API_KEY)
+            logger.info("cohere_client_initialized", model=settings.EMBEDDING_MODEL)
         except Exception as e:
             logger.warning(
-                "embedding_model_load_failed_graceful_fallback",
+                "cohere_initialization_failed_graceful_fallback",
                 model=settings.EMBEDDING_MODEL,
                 error=str(e),
                 fallback="simple_prompt_mode"
             )
-            self.embedding_model = None
+            self.cohere_client = None
             initialization_failed = True
 
         try:
@@ -142,7 +133,7 @@ class RAGService:
         if initialization_failed:
             logger.warning(
                 "rag_service_degraded_mode",
-                embedding_model_available=self.embedding_model is not None,
+                embedding_model_available=self.cohere_client is not None,
                 qdrant_available=self.qdrant_client is not None,
                 message="RAG service operating in degraded mode. Retrieval operations will return empty results."
             )
@@ -150,7 +141,10 @@ class RAGService:
             logger.info("rag_service_initialized_successfully")
 
     async def _ensure_collection(self) -> None:
-        """Ensure Qdrant collection exists."""
+        """
+        Ensure Qdrant collection exists.
+        MIGRATION NOTE: Existing Qdrant collections must be deleted and recreated when switching embedding models.
+        """
         try:
             await self.qdrant_client.get_collection(self.collection_name)
             logger.info("collection_exists", name=self.collection_name)
@@ -193,31 +187,37 @@ class RAGService:
         return f"{source}_{chunk_index}_{hash_obj.hexdigest()[:8]}"
 
     async def _embed_texts(self, texts: List[str]) -> List[List[float]]:
-        """
-        Embed a list of texts using the embedding model.
-
-        If embedding model is unavailable, returns empty embeddings.
-
-        Args:
-            texts: List of texts to embed
-
-        Returns:
-            List of embedding vectors (empty list if model unavailable)
-        """
-        if not self.embedding_model:
-            logger.warning("embedding_model_unavailable_returning_empty_embeddings", text_count=len(texts))
+        if not texts:
+            return []
+        if not self.cohere_client:
+            logger.warning("cohere_client_unavailable_returning_empty")
             return [[] for _ in texts]
-
+            
         try:
-            loop = asyncio.get_event_loop()
-            embeddings = await loop.run_in_executor(
-                None,
-                lambda: self.embedding_model.encode(texts, convert_to_tensor=False)
+            response = await self.cohere_client.embed(
+                texts=texts,
+                model=settings.EMBEDDING_MODEL,
+                input_type="search_document"
             )
-            return [emb.tolist() for emb in embeddings]
+            return response.embeddings
         except Exception as e:
-            logger.error("embedding_failed_returning_empty", error=str(e), text_count=len(texts))
+            logger.error("cohere_embed_failed", error=str(e))
             return [[] for _ in texts]
+
+    async def _embed_query(self, query: str) -> List[float]:
+        if not self.cohere_client:
+            return []
+            
+        try:
+            response = await self.cohere_client.embed(
+                texts=[query],
+                model=settings.EMBEDDING_MODEL,
+                input_type="search_query"
+            )
+            return response.embeddings[0] if response.embeddings else []
+        except Exception as e:
+            logger.error("cohere_query_embed_failed", error=str(e))
+            return []
 
     async def index_repository_boilerplate(self, repo_path: str) -> int:
         """
@@ -376,8 +376,8 @@ class RAGService:
             logger.warning("qdrant_unavailable_skipping_chunk_insertion", chunk_count=len(chunks))
             return 0
 
-        if not self.embedding_model:
-            logger.warning("embedding_model_unavailable_skipping_chunk_insertion", chunk_count=len(chunks))
+        if not self.cohere_client:
+            logger.warning("cohere_client_unavailable_skipping_chunk_insertion", chunk_count=len(chunks))
             return 0
 
         if not chunks:
@@ -439,11 +439,11 @@ class RAGService:
             await self.initialize()
 
         # Graceful degradation: return empty results if RAG is unavailable
-        if not self.embedding_model or not self.qdrant_client:
+        if not self.cohere_client or not self.qdrant_client:
             logger.warning(
                 "rag_degraded_skipping_retrieval",
                 query=query,
-                embedding_available=self.embedding_model is not None,
+                embedding_available=self.cohere_client is not None,
                 qdrant_available=self.qdrant_client is not None
             )
             return []
@@ -452,8 +452,9 @@ class RAGService:
             logger.info("retrieving_best_practices", query=query, source=source_filter)
 
             # Embed the query
-            query_embedding = await self._embed_texts([query])
-            query_vector = query_embedding[0]
+            query_vector = await self._embed_query(query)
+            if not query_vector:
+                return []
 
             # Build filter if needed
             query_filter = None
@@ -602,6 +603,76 @@ class RAGService:
 
         except Exception as e:
             logger.error("collection_clear_failed", error=str(e))
+
+    async def index_code_example(self, source_name: str, code: str, metadata: dict) -> int:
+        """
+        Indexes code snippets (split by functions/classes) into a separate Qdrant collection "code_examples".
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        if not self.qdrant_client:
+            logger.warning("index_code_example_skipped_qdrant_unavailable")
+            return 0
+
+        # Ensure collection exists
+        collection_name = "code_examples"
+        try:
+            await self.qdrant_client.get_collection(collection_name)
+        except Exception:
+            await self.qdrant_client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=self.embedding_dim, distance=Distance.COSINE)
+            )
+
+        # Chunk code by functions/classes
+        chunks = []
+        import re
+        splits = re.split(r'(?=\n(?:def|class)\s+)', "\n" + code)
+        splits = [s.strip() for s in splits if s.strip()]
+
+        for idx, split_code in enumerate(splits):
+            chunk_id = self._generate_chunk_id(f"code_{source_name}", idx, split_code)
+            chunks.append(
+                DocumentChunk(
+                    id=chunk_id,
+                    text=split_code,
+                    source=source_name,
+                    metadata={"chunk_index": idx, **metadata}
+                )
+            )
+
+        if not self.cohere_client or not chunks:
+            return 0
+
+        try:
+            texts = [chunk.text for chunk in chunks]
+            embeddings = await self._embed_texts(texts)
+
+            points = []
+            for chunk, embedding in zip(chunks, embeddings):
+                if not embedding:
+                    continue
+                chunk_numeric_id = int(hashlib.md5(chunk.id.encode()).hexdigest(), 16) % (10 ** 8)
+                points.append(
+                    PointStruct(
+                        id=chunk_numeric_id,
+                        vector=embedding,
+                        payload={
+                            "chunk_id": chunk.id,
+                            "text": chunk.text,
+                            "source": chunk.source,
+                            "metadata": chunk.metadata
+                        }
+                    )
+                )
+
+            if points:
+                await self.qdrant_client.upsert(collection_name=collection_name, points=points)
+            return len(points)
+        except Exception as e:
+            logger.error("index_code_example_failed", error=str(e))
+            return 0
 
 
 # ============================================================================
