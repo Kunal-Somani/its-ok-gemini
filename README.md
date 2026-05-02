@@ -117,16 +117,3 @@ File-tailing is single-instance and non-concurrent. Redis channels are multi-pro
 | `JWT_SECRET` | ✅ | Secret for JWT signing |
 | `QDRANT_URL` | ❌ | Qdrant vector DB URL (default: `http://qdrant:6333`) |
 | `ALLOWED_ORIGINS` | ❌ | CORS origins (default: `http://localhost:5173`) |
-
-## Tech Stack
-
-![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat-square&logo=fastapi)
-![React](https://img.shields.io/badge/React_19-20232A?style=flat-square&logo=react&logoColor=61DAFB)
-![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=flat-square&logo=postgresql&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)
-![Celery](https://img.shields.io/badge/Celery-37814A?style=flat-square&logo=celery&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
-
-## License
-MIT
