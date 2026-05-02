@@ -2,6 +2,7 @@ import asyncio
 import uuid
 from app.core.celery_app import celery_app
 
+
 @celery_app.task(
     bind=True,
     name="app.tasks.generation_task.run_generation",
@@ -16,6 +17,7 @@ def run_generation(self, task_id: str, instruction: str, attachments: list = Non
     Runs the async orchestrator inside a new event loop.
     """
     from app.workers.orchestrator import orchestrator
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -23,7 +25,7 @@ def run_generation(self, task_id: str, instruction: str, attachments: list = Non
             orchestrator.process_task(
                 task_id=uuid.UUID(task_id),
                 instruction=instruction,
-                attachments=attachments or []
+                attachments=attachments or [],
             )
         )
     finally:

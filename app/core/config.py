@@ -16,12 +16,21 @@ class Settings(BaseSettings):
     )
 
     # LLM Settings
-    ANTHROPIC_API_KEY: str = Field(..., description="Anthropic API key")
-    ANTHROPIC_MODEL: str = Field(
-        default="claude-sonnet-4-5", description="claude-sonnet-4-5 or claude-opus-4-5"
+    MODEL_PATH: str = Field(
+        default="models/qwen2.5-coder-7b-instruct-q4_k_m.gguf",
+        description="Path to the GGUF model file",
     )
-    ANTHROPIC_MAX_TOKENS: int = Field(default=8192)
-
+    MODEL_N_CTX: int = Field(default=32768, description="Context window size in tokens")
+    MODEL_N_GPU_LAYERS: int = Field(
+        default=0,
+        description="Number of layers to offload to GPU. Set to -1 for full GPU, 0 for CPU-only",
+    )
+    MODEL_MAX_TOKENS: int = Field(
+        default=8192, description="Maximum tokens to generate per request"
+    )
+    MODEL_N_THREADS: int = Field(
+        default=4, description="Number of CPU threads for inference"
+    )
     # RAG & Vector Database Settings
     QDRANT_URL: str = Field(
         default="http://localhost:6333", description="Qdrant Vector Database URL"

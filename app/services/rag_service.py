@@ -76,7 +76,9 @@ class BM25Index:
             return []
         tokenized_query = query.lower().split()
         scores = self.bm25.get_scores(tokenized_query)
-        top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
+        top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[
+            :top_k
+        ]
         return [(self.doc_ids[i], float(scores[i])) for i in top_indices]
 
 
@@ -477,24 +479,24 @@ class RAGService:
     def _reciprocal_rank_fusion(
         dense_results: List[RetrievalResult],
         sparse_results: List[Tuple[str, float]],
-        k: int = 60
+        k: int = 60,
     ) -> List[RetrievalResult]:
         """Merge dense and sparse results using RRF."""
         scores: Dict[str, float] = {}
-        
+
         # Build lookup from chunk_id -> RetrievalResult for dense
         dense_map = {r.metadata.get("chunk_id", r.text[:50]): r for r in dense_results}
-        
+
         for rank, result in enumerate(dense_results):
             doc_id = result.metadata.get("chunk_id", result.text[:50])
             scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank + 1)
-        
+
         for rank, (doc_id, _) in enumerate(sparse_results):
             scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank + 1)
-        
+
         # Sort by RRF score
         sorted_ids = sorted(scores, key=lambda x: scores[x], reverse=True)
-        
+
         # Return RetrievalResults in RRF order, only those we have full data for
         fused = []
         for doc_id in sorted_ids:
@@ -504,16 +506,20 @@ class RAGService:
                 fused.append(result)
         return fused
 
-    async def retrieve_best_practices(self, query: str, source_filter: Optional[str] = None) -> List[RetrievalResult]:
+    async def retrieve_best_practices(
+        self, query: str, source_filter: Optional[str] = None
+    ) -> List[RetrievalResult]:
         # 1. Dense retrieval via Qdrant
         dense_results = await self._dense_search(query, source_filter)
-        
+
         # 2. Sparse retrieval via BM25
         sparse_results = self.bm25_index.search(query, top_k=self.top_k * 2)
-        
+
         # 3. Fuse via RRF
         if dense_results and sparse_results:
-            return self._reciprocal_rank_fusion(dense_results, sparse_results)[:self.top_k]
+            return self._reciprocal_rank_fusion(dense_results, sparse_results)[
+                : self.top_k
+            ]
         return dense_results or []
 
     async def _dense_search(

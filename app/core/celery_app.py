@@ -5,7 +5,7 @@ celery_app = Celery(
     "archon",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.generation_task"]
+    include=["app.tasks.generation_task"],
 )
 
 celery_app.conf.update(
@@ -19,5 +19,5 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     task_routes={
         "app.tasks.generation_task.run_generation": {"queue": "generation"},
-    }
+    },
 )

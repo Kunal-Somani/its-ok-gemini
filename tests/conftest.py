@@ -18,7 +18,6 @@ TestingSessionLocal = async_sessionmaker(
 @pytest.fixture(autouse=True)
 def override_settings():
     settings.API_KEY = "test_api_key"
-    settings.ANTHROPIC_API_KEY = "test_anthropic_key"
     settings.COHERE_API_KEY = "test_cohere_key"
     yield
 

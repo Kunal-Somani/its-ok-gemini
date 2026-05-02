@@ -32,12 +32,10 @@ def test_read_existing_code(mock_exists, orchestrator):
 
 
 @patch("app.services.orchestrator.GithubService")
-@patch("app.services.orchestrator.AnthropicService")
+@patch("app.services.orchestrator.QwenCoderService")
 @patch("app.services.orchestrator.RAGService")
 @pytest.mark.asyncio
-async def test_process_task_happy_path(
-    mock_rag, mock_anthropic, mock_github, orchestrator
-):
+async def test_process_task_happy_path(mock_rag, mock_qwen, mock_github, orchestrator):
     task = TaskRecord(
         id="a1b2c3d4-e5f6-7890-1234-567890abcdef",
         task_name="test",
@@ -60,7 +58,7 @@ async def test_process_task_happy_path(
         "files": {"test.py": "print('ok')"},
         "metadata": {},
     }
-    mock_anthropic.return_value = mock_llm_instance
+    mock_qwen.return_value = mock_llm_instance
 
     mock_rag_instance = AsyncMock()
     mock_rag_instance.retrieve_best_practices.return_value = []

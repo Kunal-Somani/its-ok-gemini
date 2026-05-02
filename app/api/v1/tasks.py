@@ -87,6 +87,7 @@ async def create_task(
 
     # 3. Offload to Celery Task
     from app.tasks.generation_task import run_generation
+
     run_generation.delay(str(new_task.id), task_in.instruction, task_in.attachments)
 
     return new_task

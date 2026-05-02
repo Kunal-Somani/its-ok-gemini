@@ -143,7 +143,11 @@ services:
       DATABASE_SYNC_URL: postgresql+psycopg2://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-archon}
       REDIS_URL: redis://redis:6379
       QDRANT_URL: http://qdrant:6333
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      MODEL_PATH: ${MODEL_PATH:-models/qwen2.5-coder-7b-instruct-q4_k_m.gguf}
+      MODEL_N_CTX: ${MODEL_N_CTX:-32768}
+      MODEL_N_GPU_LAYERS: ${MODEL_N_GPU_LAYERS:-0}
+      MODEL_MAX_TOKENS: ${MODEL_MAX_TOKENS:-8192}
+      MODEL_N_THREADS: ${MODEL_N_THREADS:-4}
       COHERE_API_KEY: ${COHERE_API_KEY}
       API_KEY: ${API_KEY}
       JWT_SECRET: ${JWT_SECRET}
@@ -169,6 +173,8 @@ services:
         limits:
           cpus: '1.0'
           memory: 1G
+    volumes:
+      - ./models:/app/models:ro
 
   frontend:
     build:
@@ -232,7 +238,11 @@ services:
       DATABASE_SYNC_URL: postgresql+psycopg2://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-archon}
       REDIS_URL: redis://redis:6379
       QDRANT_URL: http://qdrant:6333
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      MODEL_PATH: ${MODEL_PATH:-models/qwen2.5-coder-7b-instruct-q4_k_m.gguf}
+      MODEL_N_CTX: ${MODEL_N_CTX:-32768}
+      MODEL_N_GPU_LAYERS: ${MODEL_N_GPU_LAYERS:-0}
+      MODEL_MAX_TOKENS: ${MODEL_MAX_TOKENS:-8192}
+      MODEL_N_THREADS: ${MODEL_N_THREADS:-4}
       COHERE_API_KEY: ${COHERE_API_KEY}
       API_KEY: ${API_KEY}
       JWT_SECRET: ${JWT_SECRET}
@@ -252,6 +262,8 @@ services:
         limits:
           cpus: '2.0'
           memory: 2G
+    volumes:
+      - ./models:/app/models:ro
 
   flower:
     image: mher/flower:2.0

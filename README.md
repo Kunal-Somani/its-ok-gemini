@@ -40,7 +40,7 @@ graph TD
 |-----------|------|-------|
 | FastAPI API Layer | Request handling, auth, idempotency | FastAPI, SlowAPI, JWT |
 | Celery Worker | Durable async task execution | Celery, Redis |
-| Anthropic LLM | Structured code generation via Tool Use | Claude claude-sonnet-4-5 |
+| Local LLM | GBNF-constrained code generation | Qwen2.5-Coder-7B-Instruct Q4_K_M, llama-cpp-python |
 | Hybrid RAG Engine | Dense + sparse retrieval with RRF fusion | Cohere Embed v3, Qdrant, BM25 |
 | GitHub App Deployer | Repo creation + GitHub Pages deployment | GitHub App, GitPython |
 | Persistence Layer | Task lifecycle tracking | PostgreSQL, SQLAlchemy Async |
@@ -53,8 +53,8 @@ graph TD
 **Celery over FastAPI BackgroundTasks:**  
 `BackgroundTasks` runs in the same process and same event loop as the HTTP server. A server restart silently drops all in-flight tasks. Celery workers are separate processes with Redis-backed durability — a restarted worker re-picks the task.
 
-**Anthropic Tool Use over raw completions:**  
-Raw completions ask the model to self-impose JSON formatting, which fails ~15% of the time (markdown wrapping, missing keys, truncation). Tool Use forces a schema-validated response through constrained sampling — zero post-processing failures.
+**GBNF grammar sampling over raw completions or external APIs:**  
+Raw completions ask the model to self-impose JSON formatting, which fails unpredictably. External APIs exhaust on a budget and expose credentials. GBNF (Generalized Backus-Naur Form) grammar sampling in llama-cpp-python constrains the token distribution at the sampler level — the model physically cannot produce a token that violates the grammar. This gives zero-parsing-failure structured output with no API costs and no network dependency.
 
 **Hybrid RAG (BM25 + dense) with Reciprocal Rank Fusion:**  
 Dense embeddings alone miss exact-match lookups (API names, CSS class names, HTML tags). BM25 handles keyword precision. RRF combines both ranked lists into a single score without requiring score normalization across different systems.
@@ -73,7 +73,7 @@ File-tailing is single-instance and non-concurrent. Redis channels are multi-pro
    git clone https://github.com/yourusername/archon.git
    cd archon
    cp .env.example .env
-   # Fill in: ANTHROPIC_API_KEY, COHERE_API_KEY, GITHUB_*, API_KEY
+   # Fill in: COHERE_API_KEY, GITHUB_*, API_KEY
 ```
 
 2. Start all services:
@@ -116,7 +116,6 @@ File-tailing is single-instance and non-concurrent. Redis channels are multi-pro
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `API_KEY` | ✅ | Master API key (`secrets.token_urlsafe(32)`) |
-| `ANTHROPIC_API_KEY` | ✅ | Claude API key for code generation |
 | `COHERE_API_KEY` | ✅ | Cohere API key for RAG embeddings |
 | `DATABASE_URL` | ✅ | Async PostgreSQL URL |
 | `REDIS_URL` | ✅ | Redis URL for queue and pub/sub |

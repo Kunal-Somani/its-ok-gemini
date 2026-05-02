@@ -17,7 +17,8 @@ tenacity
 python-jose[cryptography]
 
 # LLM Integration
-anthropic>=0.40.0
+llama-cpp-python>=0.2.90
+huggingface-hub>=0.24.0
 
 # RAG & Vector Embeddings
 cohere>=5.0.0

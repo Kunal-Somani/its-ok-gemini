@@ -1,82 +1,119 @@
+"""
+Unit tests for QwenCoderService (llama-cpp-python + GBNF backend).
+The Llama model is mocked — no model file required to run tests.
+"""
+
+import json
 import pytest
-from unittest.mock import AsyncMock, patch
-from app.services.llm_service import AnthropicService, APIError
+from unittest.mock import MagicMock, patch
 
-class MockToolUseBlock:
-    def __init__(self, input_dict):
-        self.type = "tool_use"
-        self.input = input_dict
+from app.services.llm_service import (
+    QwenCoderService,
+    PromptBuilder,
+    GenerationError,
+    ModelNotLoadedError,
+    PROJECT_FILES_GRAMMAR_STR,
+)
 
-class MockUsage:
-    def __init__(self, input_tokens, output_tokens):
-        self.input_tokens = input_tokens
-        self.output_tokens = output_tokens
 
-class MockResponse:
-    def __init__(self, content, model, input_tokens, output_tokens):
-        self.content = content
-        self.model = model
-        self.usage = MockUsage(input_tokens, output_tokens)
-
-@pytest.fixture
-def mock_anthropic_client():
-    with patch("app.services.llm_service.anthropic.AsyncAnthropic") as MockClient:
-        mock_instance = AsyncMock()
-        MockClient.return_value = mock_instance
-        yield mock_instance
-
-@pytest.fixture
-def service(mock_anthropic_client):
-    return AnthropicService()
-
-@pytest.mark.asyncio
-async def test_generate_code_tool_use(service, mock_anthropic_client):
-    # Setup mock response with a valid tool_use block
-    tool_input = {
+VALID_JSON_OUTPUT = json.dumps(
+    {
         "index_html": "<html><body>Hello</body></html>",
-        "readme_md": "# Project",
-        "license": "MIT"
+        "readme_md": "# Test Project",
+        "license": "MIT License 2025",
     }
-    mock_block = MockToolUseBlock(tool_input)
-    mock_response = MockResponse(content=[mock_block], model="claude-3-opus", input_tokens=10, output_tokens=50)
-    
-    mock_anthropic_client.messages.create.return_value = mock_response
-    
-    result = await service.generate_code("Create a simple website")
-    
+)
+
+
+def make_mock_llm_output(
+    text: str, prompt_tokens: int = 10, completion_tokens: int = 20
+):
+    return {
+        "choices": [{"text": text}],
+        "usage": {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+        },
+    }
+
+
+@pytest.fixture
+def service():
+    svc = QwenCoderService()
+    mock_llm = MagicMock()
+    mock_llm.return_value = make_mock_llm_output(VALID_JSON_OUTPUT)
+    svc._llm = mock_llm
+    svc._grammar = MagicMock()
+    return svc
+
+
+def test_grammar_string_is_valid():
+    """GBNF grammar string must be non-empty and contain required keys."""
+    assert "index_html" in PROJECT_FILES_GRAMMAR_STR
+    assert "readme_md" in PROJECT_FILES_GRAMMAR_STR
+    assert "license" in PROJECT_FILES_GRAMMAR_STR
+
+
+def test_parse_output_valid(service):
+    files = service._parse_output(VALID_JSON_OUTPUT)
+    assert "index.html" in files
+    assert "README.md" in files
+    assert "LICENSE" in files
+    assert files["index.html"] == "<html><body>Hello</body></html>"
+
+
+def test_parse_output_invalid_json_raises(service):
+    with pytest.raises(GenerationError):
+        service._parse_output("not json at all {{{")
+
+
+def test_parse_output_missing_key_raises(service):
+    bad = json.dumps({"index_html": "<html/>", "readme_md": "# hi"})  # license missing
+    with pytest.raises(GenerationError):
+        service._parse_output(bad)
+
+
+@pytest.mark.asyncio
+async def test_generate_code_returns_expected_shape(service):
+    result = await service.generate_code("Build a portfolio site", round_index=1)
     assert "files" in result
-    assert result["files"]["index.html"] == "<html><body>Hello</body></html>"
-    assert result["files"]["README.md"] == "# Project"
-    assert result["files"]["LICENSE"] == "MIT"
-    
     assert "metadata" in result
-    assert result["metadata"]["prompt_token_count"] == 10
-    assert result["metadata"]["completion_token_count"] == 50
-    assert result["metadata"]["backend"] == "anthropic_tool_use"
+    assert result["metadata"]["backend"] == "llama_cpp_gbnf"
+    assert "index.html" in result["files"]
+
 
 @pytest.mark.asyncio
-async def test_generate_code_tool_use_missing(service, mock_anthropic_client):
-    class MockTextBlock:
-        def __init__(self):
-            self.type = "text"
-            self.text = "I failed to use the tool."
-            
-    mock_response = MockResponse(content=[MockTextBlock()], model="claude-3-opus", input_tokens=10, output_tokens=50)
-    mock_anthropic_client.messages.create.return_value = mock_response
-    
-    with pytest.raises(APIError, match="Failed to parse Anthropic tool_use:"):
-        await service.generate_code("Create a simple website")
+async def test_generate_code_surgical_update_uses_existing_code(service):
+    result = await service.generate_code(
+        "Add a dark mode toggle",
+        round_index=2,
+        existing_code="<html>old</html>",
+    )
+    assert result["files"]["index.html"] is not None
+    # Verify surgical prompt was used (prompt contains existing code marker)
+    call_args = service._llm.call_args[0][0]
+    assert "EXISTING CODE" in call_args
+
 
 @pytest.mark.asyncio
-async def test_generate_code_tool_use_missing_keys(service, mock_anthropic_client):
-    # Setup mock response with a tool_use block missing required keys
-    tool_input = {
-        "index_html": "<html><body>Hello</body></html>"
-    }
-    mock_block = MockToolUseBlock(tool_input)
-    mock_response = MockResponse(content=[mock_block], model="claude-3-opus", input_tokens=10, output_tokens=50)
-    
-    mock_anthropic_client.messages.create.return_value = mock_response
-    
-    with pytest.raises(APIError, match="Failed to parse Anthropic tool_use:"):
-        await service.generate_code("Create a simple website")
+async def test_generate_code_raises_when_model_not_loaded():
+    svc = QwenCoderService()
+    # _llm is None and model file doesn't exist
+    with patch.object(
+        svc, "_ensure_loaded", side_effect=ModelNotLoadedError("no file")
+    ):
+        with pytest.raises(ModelNotLoadedError):
+            await svc.generate_code("test")
+
+
+def test_prompt_builder_base_contains_system_prompt():
+    prompt = PromptBuilder.base_prompt("Build a calculator")
+    assert "<|im_start|>system" in prompt
+    assert "Build a calculator" in prompt
+    assert "<|im_start|>assistant" in prompt
+
+
+def test_prompt_builder_surgical_contains_existing_code():
+    prompt = PromptBuilder.surgical_update_prompt("<html>old</html>", "add nav bar")
+    assert "EXISTING CODE" in prompt
+    assert "add nav bar" in prompt

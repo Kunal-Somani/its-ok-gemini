@@ -49,42 +49,60 @@ async def test_retrieve_best_practices_unavailable(rag_service):
     results = await rag_service.retrieve_best_practices("test")
     assert results == []
 
+
 def test_bm25_search():
     from app.services.rag_service import BM25Index
+
     idx = BM25Index()
     idx.add_documents(
-        ["import React from 'react'", "fastapi background tasks", "qdrant dense retrieval"],
-        ["id1", "id2", "id3"]
+        [
+            "import React from 'react'",
+            "fastapi background tasks",
+            "qdrant dense retrieval",
+        ],
+        ["id1", "id2", "id3"],
     )
     res = idx.search("fastapi", top_k=2)
     assert len(res) == 2
     assert res[0][0] == "id2"
 
+
 def test_rrf_fusion():
     from app.services.rag_service import RAGService, RetrievalResult
+
     dense = [
-        RetrievalResult(text="text1", source="src", score=0.9, metadata={"chunk_id": "id1"}),
-        RetrievalResult(text="text2", source="src", score=0.8, metadata={"chunk_id": "id2"})
+        RetrievalResult(
+            text="text1", source="src", score=0.9, metadata={"chunk_id": "id1"}
+        ),
+        RetrievalResult(
+            text="text2", source="src", score=0.8, metadata={"chunk_id": "id2"}
+        ),
     ]
     sparse = [("id2", 1.5), ("id3", 1.2)]
-    
+
     fused = RAGService._reciprocal_rank_fusion(dense, sparse, k=60)
     assert len(fused) == 2
     assert fused[0].metadata["chunk_id"] == "id2"
     assert fused[1].metadata["chunk_id"] == "id1"
 
+
 @patch("app.services.rag_service.RAGService._dense_search")
 @pytest.mark.asyncio
 async def test_hybrid_retrieve(mock_dense, rag_service):
     from app.services.rag_service import RetrievalResult
+
     mock_dense.return_value = [
-        RetrievalResult(text="text1", source="src", score=0.9, metadata={"chunk_id": "id1"}),
-        RetrievalResult(text="text2", source="src", score=0.8, metadata={"chunk_id": "id2"})
+        RetrievalResult(
+            text="text1", source="src", score=0.9, metadata={"chunk_id": "id1"}
+        ),
+        RetrievalResult(
+            text="text2", source="src", score=0.8, metadata={"chunk_id": "id2"}
+        ),
     ]
     rag_service.top_k = 1
-    
+
     rag_service.bm25_index.search = lambda q, top_k: [("id2", 1.5)]
-    
+
     results = await rag_service.retrieve_best_practices("test")
     assert len(results) == 1
     assert results[0].metadata["chunk_id"] == "id2"
