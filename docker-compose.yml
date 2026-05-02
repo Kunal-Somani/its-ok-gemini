@@ -9,13 +9,13 @@ x-logging: &default-logging
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: its-ok-gemini-postgres
+    container_name: archon-postgres
     restart: unless-stopped
     logging: *default-logging
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_NAME:-its_ok_gemini}
+      POSTGRES_DB: ${DB_NAME:-archon}
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
@@ -34,7 +34,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: its-ok-gemini-redis
+    container_name: archon-redis
     restart: unless-stopped
     logging: *default-logging
     command: redis-server --appendonly yes
@@ -56,7 +56,7 @@ services:
 
   qdrant:
     image: qdrant/qdrant:latest
-    container_name: its-ok-gemini-qdrant
+    container_name: archon-qdrant
     restart: unless-stopped
     logging: *default-logging
     ports:
@@ -79,7 +79,7 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
-    container_name: its-ok-gemini-prometheus
+    container_name: archon-prometheus
     restart: unless-stopped
     logging: *default-logging
     ports:
@@ -104,7 +104,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    container_name: its-ok-gemini-grafana
+    container_name: archon-grafana
     restart: unless-stopped
     logging: *default-logging
     ports:
@@ -134,13 +134,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: its-ok-gemini-api
+    container_name: archon-api
     restart: unless-stopped
     logging: *default-logging
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-production}
-      DATABASE_URL: postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-its_ok_gemini}
-      DATABASE_SYNC_URL: postgresql+psycopg2://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-its_ok_gemini}
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-archon}
+      DATABASE_SYNC_URL: postgresql+psycopg2://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-archon}
       REDIS_URL: redis://redis:6379
       QDRANT_URL: http://qdrant:6333
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
@@ -174,7 +174,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: its-ok-gemini-frontend
+    container_name: archon-frontend
     restart: unless-stopped
     logging: *default-logging
     depends_on:
@@ -194,7 +194,7 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    container_name: its-ok-gemini-caddy
+    container_name: archon-caddy
     restart: unless-stopped
     logging: *default-logging
     ports:
@@ -228,8 +228,8 @@ services:
     command: celery -A app.core.celery_app worker --loglevel=info -Q generation --concurrency=2
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-production}
-      DATABASE_URL: postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-its_ok_gemini}
-      DATABASE_SYNC_URL: postgresql+psycopg2://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-its_ok_gemini}
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-archon}
+      DATABASE_SYNC_URL: postgresql+psycopg2://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-archon}
       REDIS_URL: redis://redis:6379
       QDRANT_URL: http://qdrant:6333
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}

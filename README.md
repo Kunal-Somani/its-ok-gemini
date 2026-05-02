@@ -1,7 +1,9 @@
-# Agent Command Center
-Autonomous AI web app generator with hybrid RAG, Celery task orchestration, GitHub App deployment, and a real-time React dashboard. Zero manual deployment steps.
+# Archon
+
+Autonomous instruction-to-deployment pipeline. Accepts a natural language brief, retrieves relevant context via hybrid RAG, generates schema-validated code through Anthropic Tool Use, and deploys a live web application to GitHub Pages — without any manual steps.
 
 ## Architecture
+
 ```mermaid
 graph TD
     Client([Client / API]) -->|POST /api/v1/tasks/ready| API[FastAPI API Layer]
@@ -66,23 +68,30 @@ File-tailing is single-instance and non-concurrent. Redis channels are multi-pro
 ## Quick Start
 
 1. Clone and configure:
+
 ```bash
-   git clone https://github.com/yourusername/agent-command-center.git
-   cd agent-command-center
+   git clone https://github.com/yourusername/archon.git
+   cd archon
    cp .env.example .env
    # Fill in: ANTHROPIC_API_KEY, COHERE_API_KEY, GITHUB_*, API_KEY
 ```
+
 2. Start all services:
+
 ```bash
    docker compose up -d --build
 ```
+
 3. Run migrations:
+
 ```bash
    docker compose exec api alembic upgrade head
 ```
+
 4. Open the dashboard:  
    Navigate to `http://localhost` (Caddy serves frontend on port 80)
-5. Submit a task:
+2. Submit a task:
+
 ```bash
    curl -X POST http://localhost/api/v1/tasks/ready \
      -H "X-Api-Key: your_api_key" \

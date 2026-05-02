@@ -38,7 +38,7 @@ export default function Settings() {
     <div className="max-w-3xl mx-auto space-y-8">
       <div>
         <h2 className="text-2xl font-bold text-white mb-2">Platform Settings</h2>
-        <p className="text-slate-400">Configure your local connection to the Agent Command Center orchestration backend.</p>
+        <p className="text-slate-400">Configure your local connection to the Archon orchestration backend.</p>
       </div>
       
       <div className="glass-card rounded-xl border border-white/5 p-8">

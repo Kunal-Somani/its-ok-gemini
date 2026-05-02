@@ -28,8 +28,8 @@ if settings.OTLP_ENDPOINT:
 trace.set_tracer_provider(provider)
 
 app = FastAPI(
-    title="Agent Command Center API",
-    description="Autonomous AI code generation and deployment pipeline",
+    title="Archon API",
+    description="Autonomous instruction-to-deployment pipeline",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",

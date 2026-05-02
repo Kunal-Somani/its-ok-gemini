@@ -5,7 +5,7 @@ export function Docs() {
     <div className="space-y-6">
       <div className="glass-card p-6 border-l-4 border-l-[#00ff9f]">
         <h1 className="text-2xl font-bold text-white mb-2">Documentation</h1>
-        <p className="text-gray-400">Complete API reference and integration guide for the Agent Command Center.</p>
+        <p className="text-gray-400">Complete API reference and integration guide for the Archon.</p>
         <div className="mt-4">
           <a href="https://github.com/yourusername/agent-command-center" target="_blank" rel="noreferrer" className="text-[#00ff9f] hover:text-[#00cc7d] underline flex items-center gap-2">
             <Book size={16} /> View Full README on GitHub

@@ -66,7 +66,7 @@ class GitManager:
         self,
         message: str = "feat: automated code generation update",
         author_name: str = "Gemini Worker",
-        author_email: str = "bot@its-ok-gemini.local",
+        author_email: str = "bot@archon.local",
     ):
         """Commits changes with a conventional message and ensures the branch is 'main'."""
         actor = Actor(author_name, author_email)
@@ -177,7 +177,7 @@ class GitHubService:
                 "name": repo_name,
                 "private": False,
                 "auto_init": False,  # Ensure we have an empty slate
-                "description": "Auto-generated project via its-ok-gemini-v2",
+                "description": "Auto-generated project via archon",
             }
             create_resp = await client.post(create_url, headers=headers, json=payload)
 

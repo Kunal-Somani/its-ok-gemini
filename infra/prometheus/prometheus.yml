@@ -1,9 +1,9 @@
-# Prometheus configuration for its-ok-gemini
+# Prometheus configuration for archon
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
   external_labels:
-    monitor: 'its-ok-gemini'
+    monitor: 'archon'
 
 # Alertmanager configuration
 alerting:
@@ -22,7 +22,7 @@ scrape_configs:
       - targets: ['localhost:9090']
 
   # FastAPI application metrics
-  - job_name: 'its-ok-gemini-api'
+  - job_name: 'archon_api'
     static_configs:
       - targets: ['api:8000']
     metrics_path: '/metrics'

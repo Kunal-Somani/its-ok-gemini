@@ -35,7 +35,7 @@ export default function Layout() {
               <Terminal size={18} className="text-white" />
             </div>
             <h1 className="text-xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-[#00ff9f]">
-              ACC
+              Archon
             </h1>
           </div>
 
@@ -70,7 +70,7 @@ export default function Layout() {
         {/* Top Header */}
         <header className="h-16 glass-card border-b border-white/5 flex items-center justify-between px-6 shrink-0 z-30">
           <div className="flex items-center gap-4 hidden md:flex pl-10 md:pl-0">
-             <span className="text-sm text-slate-400 font-mono tracking-widest uppercase">Agent Command Center</span>
+             <span className="text-sm text-slate-400 font-mono tracking-widest uppercase">Archon</span>
           </div>
           
           <div className="flex items-center gap-6 ml-auto">

@@ -109,8 +109,8 @@ jobs:
       
       - name: Build backend Dockerfile
         continue-on-error: false
-        run: docker build -t its-ok-gemini-backend:${{ github.sha }} .
+        run: docker build -t archon-backend:${{ github.sha }} .
         
       - name: Build frontend Dockerfile
         continue-on-error: false
-        run: docker build -t its-ok-gemini-frontend:${{ github.sha }} ./frontend
+        run: docker build -t archon-frontend:${{ github.sha }} ./frontend

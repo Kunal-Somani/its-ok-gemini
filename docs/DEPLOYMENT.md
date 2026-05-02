@@ -1,4 +1,4 @@
-# Deployment Guide
+# Archon — Deployment Guide
 
 ## 🚂 Railway Deployment
 1. Connect your GitHub repository to Railway.

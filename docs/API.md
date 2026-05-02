@@ -1,4 +1,4 @@
-# API Documentation
+# Archon — API Reference
 
 ## Authentication
 All API endpoints require the `X-Api-Key` header.
