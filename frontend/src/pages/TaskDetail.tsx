@@ -1,4 +1,3 @@
-import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getTask, cancelTask } from '../api/client';
@@ -7,6 +6,7 @@ import { format } from 'date-fns';
 import TaskTimeline from '../components/TaskTimeline';
 import LogTerminal from '../components/LogTerminal';
 import StatusBadge from '../components/StatusBadge';
+import GenerationStream from '../components/GenerationStream';
 
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>();
@@ -28,6 +28,7 @@ export default function TaskDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task', id] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      navigate('/tasks');
     }
   });
 
@@ -46,6 +47,11 @@ export default function TaskDetail() {
         <div className="flex-1 flex items-center gap-4">
           <h2 className="text-2xl font-bold text-white">{task.task_name}</h2>
           <StatusBadge status={task.status} />
+          {task.retry_count && task.retry_count > 0 ? (
+            <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-amber-500/10 text-amber-500 border border-amber-500/20">
+              Retried {task.retry_count}x
+            </span>
+          ) : null}
         </div>
         {isActive && (
           <button 
@@ -59,7 +65,7 @@ export default function TaskDetail() {
         )}
       </div>
 
-      <TaskTimeline currentStatus={task.status} />
+      <TaskTimeline task={task} />
 
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Metadata */}
@@ -118,6 +124,7 @@ export default function TaskDetail() {
                 </div>
               </div>
             )}
+            <GenerationStream taskId={task.id} isGenerating={task.status === 'GENERATING'} />
           </div>
         </div>
 

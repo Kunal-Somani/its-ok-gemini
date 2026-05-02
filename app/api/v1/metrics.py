@@ -18,48 +18,41 @@ router = APIRouter()
 
 # Task status counter
 task_status_counter = Counter(
-    'task_status_total',
-    'Total count of tasks by status',
-    ['status'],
-    registry=REGISTRY
+    "task_status_total", "Total count of tasks by status", ["status"], registry=REGISTRY
 )
 
 # Task success/failure rates
 task_success_gauge = Gauge(
-    'task_status_count',
-    'Count of tasks by status',
-    ['status'],
-    registry=REGISTRY
+    "task_status_count", "Count of tasks by status", ["status"], registry=REGISTRY
 )
 
 # LLM token usage metrics
 llm_prompt_tokens = Gauge(
-    'llm_tokens_prompt_total',
-    'Total prompt tokens used by LLM',
-    registry=REGISTRY
+    "llm_tokens_prompt_total", "Total prompt tokens used by LLM", registry=REGISTRY
 )
 
 llm_completion_tokens = Gauge(
-    'llm_tokens_completion_total',
-    'Total completion tokens used by LLM',
-    registry=REGISTRY
+    "llm_tokens_completion_total",
+    "Total completion tokens used by LLM",
+    registry=REGISTRY,
 )
 
 llm_tokens_total = Gauge(
-    'llm_tokens_total',
-    'Total tokens used by LLM (prompt + completion)',
-    registry=REGISTRY
+    "llm_tokens_total",
+    "Total tokens used by LLM (prompt + completion)",
+    registry=REGISTRY,
 )
 
 # Task processing histogram (by duration)
 task_processing_duration = Histogram(
-    'task_processing_duration_seconds',
-    'Task processing duration in seconds',
-    ['status'],
-    registry=REGISTRY
+    "task_processing_duration_seconds",
+    "Task processing duration in seconds",
+    ["status"],
+    registry=REGISTRY,
 )
 
 logger.info("metrics_registry_initialized", registry="global_prometheus_registry")
+
 
 @router.get("/metrics")
 async def get_metrics(db: AsyncSession = Depends(get_db)):
@@ -72,7 +65,9 @@ async def get_metrics(db: AsyncSession = Depends(get_db)):
 
     # 1. Update Task Status Counts
     try:
-        stmt = select(TaskRecord.status, func.count(TaskRecord.id)).group_by(TaskRecord.status)
+        stmt = select(TaskRecord.status, func.count(TaskRecord.id)).group_by(
+            TaskRecord.status
+        )
         result = await db.execute(stmt)
 
         for status, count in result.all():
@@ -84,7 +79,9 @@ async def get_metrics(db: AsyncSession = Depends(get_db)):
 
     # 2. Update LLM Token Usage Metrics
     try:
-        stmt = select(TaskRecord.llm_metadata).where(TaskRecord.llm_metadata != None)
+        stmt = select(TaskRecord.llm_metadata).where(
+            TaskRecord.llm_metadata.isnot(None)
+        )
         result = await db.execute(stmt)
 
         total_prompt = 0
@@ -105,7 +102,7 @@ async def get_metrics(db: AsyncSession = Depends(get_db)):
             "llm_metrics_updated",
             prompt_tokens=total_prompt,
             completion_tokens=total_completion,
-            total_tokens=total_prompt + total_completion
+            total_tokens=total_prompt + total_completion,
         )
     except Exception as e:
         logger.error("llm_metrics_update_failed", error=str(e))

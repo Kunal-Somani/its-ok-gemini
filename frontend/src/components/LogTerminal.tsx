@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { WS_BASE } from '../config';
 import { TerminalSquare, Copy, ArrowDown } from 'lucide-react';
 
@@ -9,6 +9,7 @@ interface LogTerminalProps {
 export default function LogTerminal({ taskId }: LogTerminalProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [filterLevel, setFilterLevel] = useState('ALL');
   const bottomRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -38,27 +39,37 @@ export default function LogTerminal({ taskId }: LogTerminalProps) {
   const formatLog = (log: string, index: number) => {
     try {
       const parsed = JSON.parse(log);
-      const level = parsed.level || 'INFO';
+      const level = (parsed.level || 'INFO').toLowerCase();
+      
+      if (filterLevel !== 'ALL' && level.toUpperCase() !== filterLevel) {
+        return null;
+      }
+
       const event = parsed.event || '';
       
-      let color = 'text-slate-300';
-      if (level === 'error' || level === 'ERROR') color = 'text-red-400';
-      if (level === 'warning' || level === 'WARNING') color = 'text-yellow-400';
-      if (level === 'info' || level === 'INFO') color = 'text-cyan-400';
+      let color = 'text-slate-400';
+      if (level === 'error') color = 'text-red-400';
+      if (level === 'warning') color = 'text-yellow-400';
+      if (level === 'info') color = 'text-cyan-400';
 
       return (
-        <div key={index} className="mb-1 font-mono text-[13px] leading-relaxed break-all">
-          <span className="text-slate-500 mr-2">[{parsed.timestamp || new Date().toISOString()}]</span>
-          <span className={`font-semibold mr-2 ${color}`}>[{level.toUpperCase()}]</span>
+        <div key={index} className="mb-1 font-mono text-[13px] leading-relaxed break-all flex gap-2">
+          {parsed.timestamp && (
+            <span className="text-slate-500 shrink-0">[{parsed.timestamp}]</span>
+          )}
+          <span className={`font-semibold shrink-0 ${color}`}>[{level.toUpperCase()}]</span>
           <span className="text-slate-300">{event}</span>
-          {Object.entries(parsed).map(([k, v]) => {
-            if (['level', 'event', 'timestamp', 'logger', 'task_id'].includes(k)) return null;
-            return <span key={k} className="ml-2 text-slate-500">{k}=<span className="text-slate-400">{JSON.stringify(v)}</span></span>;
-          })}
+          <span className="flex flex-wrap">
+            {Object.entries(parsed).map(([k, v]) => {
+              if (['level', 'event', 'timestamp', 'logger', 'task_id'].includes(k)) return null;
+              return <span key={k} className="ml-2 text-slate-500">{k}=<span className="text-slate-400">{JSON.stringify(v)}</span></span>;
+            })}
+          </span>
         </div>
       );
     } catch {
-      return <div key={index} className="mb-1 font-mono text-[13px] leading-relaxed text-slate-300 break-all">{log}</div>;
+      if (filterLevel !== 'ALL') return null;
+      return <div key={index} className="mb-1 font-mono text-[13px] leading-relaxed text-slate-400 break-all">{log}</div>;
     }
   };
 
@@ -70,10 +81,20 @@ export default function LogTerminal({ taskId }: LogTerminalProps) {
           <span className="text-sm font-medium font-mono uppercase tracking-wider">Live Logs</span>
         </div>
         <div className="flex items-center gap-3">
+          <select 
+            value={filterLevel} 
+            onChange={(e) => setFilterLevel(e.target.value)}
+            className="bg-black/50 text-slate-300 text-xs border border-white/10 rounded px-2 py-1 outline-none font-mono"
+          >
+            <option value="ALL">ALL</option>
+            <option value="INFO">INFO</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
+          </select>
           <button 
             onClick={() => setAutoScroll(!autoScroll)}
             className={`p-1.5 rounded-md transition-colors ${autoScroll ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-white'}`}
-            title="Auto-scroll"
+            title={autoScroll ? "Lock scroll (currently auto)" : "Unlock scroll"}
           >
             <ArrowDown size={14} />
           </button>

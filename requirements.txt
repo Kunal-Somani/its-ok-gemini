@@ -20,7 +20,9 @@ python-jose[cryptography]
 anthropic>=0.40.0
 
 # RAG & Vector Embeddings
-langchain>=0.1.0
-langchain-community>=0.0.10
 cohere>=5.0.0
 qdrant-client>=2.7.0
+
+# Task Queue
+celery[redis]>=5.3.0
+rank-bm25>=0.2.2

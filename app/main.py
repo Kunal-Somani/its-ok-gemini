@@ -36,15 +36,20 @@ app = FastAPI(
     openapi_tags=[
         {"name": "tasks", "description": "Task lifecycle management"},
         {"name": "metrics", "description": "Prometheus metrics"},
-        {"name": "health", "description": "Service health checks"}
-    ]
+        {"name": "health", "description": "Service health checks"},
+    ],
 )
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-http_requests_total = Counter('http_requests_total', 'Total HTTP requests', ['method', 'path', 'status'])
-http_request_duration = Histogram('http_request_duration_seconds', 'HTTP request duration', ['method', 'path'])
+http_requests_total = Counter(
+    "http_requests_total", "Total HTTP requests", ["method", "path", "status"]
+)
+http_request_duration = Histogram(
+    "http_request_duration_seconds", "HTTP request duration", ["method", "path"]
+)
+
 
 @app.middleware("http")
 async def metrics_middleware(request: Request, call_next):
@@ -52,9 +57,12 @@ async def metrics_middleware(request: Request, call_next):
     response = await call_next(request)
     duration = time.time() - start
     path = request.url.path
-    http_requests_total.labels(method=request.method, path=path, status=response.status_code).inc()
+    http_requests_total.labels(
+        method=request.method, path=path, status=response.status_code
+    ).inc()
     http_request_duration.labels(method=request.method, path=path).observe(duration)
     return response
+
 
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
@@ -64,6 +72,7 @@ async def request_id_middleware(request: Request, call_next):
     response.headers["X-Request-ID"] = request_id
     structlog.contextvars.clear_contextvars()
     return response
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -78,6 +87,7 @@ app.include_router(tasks.router, prefix="/api/v1", tags=["tasks"])
 app.include_router(metrics.router, tags=["metrics"])
 app.include_router(websocket.router, tags=["real-time logs"])
 
+
 @app.get("/health", tags=["system"])
 async def health_check(db: AsyncSession = Depends(get_db)):
     try:
@@ -85,6 +95,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         return {"status": "healthy", "db": "connected", "version": "1.0.0"}
     except Exception:
         raise HTTPException(503, "Database unavailable")
+
 
 # Serve static files (frontend) if they exist
 static_files_path = os.path.join(os.path.dirname(__file__), "../static")

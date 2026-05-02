@@ -1,4 +1,3 @@
-import React from 'react';
 import { LucideIcon } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line } from 'recharts';
 
@@ -8,7 +7,7 @@ interface StatCardProps {
   icon: LucideIcon;
   trend?: 'up' | 'down';
   sparklineData?: { value: number }[];
-  colorTheme?: 'purple' | 'green' | 'blue' | 'white';
+  colorTheme?: 'purple' | 'green' | 'blue' | 'white' | 'orange';
 }
 
 export default function StatCard({ title, value, icon: Icon, trend, sparklineData, colorTheme = 'white' }: StatCardProps) {
@@ -25,6 +24,9 @@ export default function StatCard({ title, value, icon: Icon, trend, sparklineDat
   } else if (colorTheme === 'blue') {
     iconColor = 'text-blue-400';
     strokeColor = '#60a5fa';
+  } else if (colorTheme === 'orange') {
+    iconColor = 'text-orange-400';
+    strokeColor = '#f97316';
   }
 
   if (trend === 'up') trendColor = 'text-[#00ff9f]';

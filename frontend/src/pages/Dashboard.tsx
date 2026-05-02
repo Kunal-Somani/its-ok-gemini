@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getTasks } from '../api/client';
 import StatCard from '../components/StatCard';
@@ -25,7 +25,7 @@ export default function Dashboard() {
   });
 
   const stats = useMemo(() => {
-    if (!tasks.length) return { total: 0, active: 0, successRate: 0, avgDuration: 0, pieData: [], areaData: [] };
+    if (!tasks.length) return { total: 0, active: 0, queueDepth: 0, successRate: 0, avgDuration: 0, pieData: [], areaData: [] };
 
     const active = tasks.filter(t => !['SUCCESS', 'FAILED'].includes(t.status)).length;
     const completed = tasks.filter(t => t.status === 'SUCCESS').length;
@@ -54,7 +54,7 @@ export default function Dashboard() {
       });
     }
 
-    return { total: tasks.length, active, successRate, avgDuration, pieData, areaData };
+    return { total: tasks.length, active, queueDepth: tasks.filter(t => ['QUEUED', 'ANALYZING'].includes(t.status)).length, successRate, avgDuration, pieData, areaData };
   }, [tasks]);
 
   const recentTasks = tasks.slice(0, 5);
@@ -64,8 +64,15 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title="Total Tasks" value={stats.total} icon={PieChartIcon} colorTheme="purple" />
         <StatCard title="Success Rate" value={`${stats.successRate}%`} icon={CheckCircle} colorTheme="green" />
-        <StatCard title="Active Tasks" value={stats.active} icon={Activity} colorTheme="blue" />
+        <div className={`transition-all duration-1000 ${stats.queueDepth > 0 ? 'shadow-[0_0_20px_rgba(249,115,22,0.3)] rounded-xl' : ''}`}>
+          <StatCard title="Queue Depth" value={stats.queueDepth} icon={Activity} colorTheme="orange" />
+        </div>
         <StatCard title="Avg Duration" value={`${stats.avgDuration}s`} icon={Clock} colorTheme="white" />
+      </div>
+
+      <div className="flex items-center gap-3 p-4 glass-card rounded-xl border border-white/5">
+        <div className="w-2 h-2 rounded-full bg-[#00ff9f] animate-pulse"></div>
+        <span className="text-sm font-medium text-slate-300">1 worker connected</span>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -9,7 +9,6 @@ Provides vector-based retrieval of:
 Uses local embedding model (all-MiniLM-L6-v2) for 100% data sovereignty.
 """
 
-import asyncio
 import os
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
@@ -19,7 +18,15 @@ import hashlib
 import structlog
 import cohere
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+from qdrant_client.models import (
+    Distance,
+    VectorParams,
+    PointStruct,
+    Filter,
+    FieldCondition,
+    MatchValue,
+)
+from rank_bm25 import BM25Okapi
 
 from app.core.config import settings
 
@@ -30,9 +37,11 @@ logger = structlog.get_logger(__name__)
 # Data Models
 # ============================================================================
 
+
 @dataclass
 class DocumentChunk:
     """Represents a chunk of indexed text."""
+
     id: str
     text: str
     source: str  # "boilerplate", "react_docs", "tailwind_docs"
@@ -43,20 +52,43 @@ class DocumentChunk:
 @dataclass
 class RetrievalResult:
     """Result from vector retrieval."""
+
     text: str
     source: str
     score: float
     metadata: Dict[str, Any]
 
 
+class BM25Index:
+    def __init__(self):
+        self.corpus: List[str] = []
+        self.doc_ids: List[str] = []
+        self.bm25: Optional[BM25Okapi] = None
+
+    def add_documents(self, texts: List[str], ids: List[str]):
+        self.corpus.extend(texts)
+        self.doc_ids.extend(ids)
+        tokenized = [t.lower().split() for t in self.corpus]
+        self.bm25 = BM25Okapi(tokenized)
+
+    def search(self, query: str, top_k: int = 10) -> List[Tuple[str, float]]:
+        if not self.bm25:
+            return []
+        tokenized_query = query.lower().split()
+        scores = self.bm25.get_scores(tokenized_query)
+        top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
+        return [(self.doc_ids[i], float(scores[i])) for i in top_indices]
+
+
 # ============================================================================
 # RAG Service
 # ============================================================================
 
+
 class RAGService:
     """
     Vector-based context retrieval system for code generation.
-    
+
     Manages:
     - Local embedding model initialization
     - Qdrant vector database connections
@@ -74,6 +106,7 @@ class RAGService:
         self.chunk_overlap = settings.RAG_CHUNK_OVERLAP
         self.top_k = settings.RAG_TOP_K
         self._initialized = False
+        self.bm25_index = BM25Index()
 
     async def initialize(self) -> None:
         """
@@ -97,7 +130,7 @@ class RAGService:
                 "cohere_initialization_failed_graceful_fallback",
                 model=settings.EMBEDDING_MODEL,
                 error=str(e),
-                fallback="simple_prompt_mode"
+                fallback="simple_prompt_mode",
             )
             self.cohere_client = None
             initialization_failed = True
@@ -106,7 +139,7 @@ class RAGService:
             # Initialize Qdrant client
             self.qdrant_client = AsyncQdrantClient(
                 url=settings.QDRANT_URL,
-                api_key=settings.QDRANT_API_KEY if settings.QDRANT_API_KEY else None
+                api_key=settings.QDRANT_API_KEY if settings.QDRANT_API_KEY else None,
             )
 
             # Verify Qdrant connection
@@ -121,7 +154,7 @@ class RAGService:
                 "qdrant_connection_failed_graceful_fallback",
                 url=settings.QDRANT_URL,
                 error=str(e),
-                fallback="simple_prompt_mode"
+                fallback="simple_prompt_mode",
             )
             self.qdrant_client = None
             initialization_failed = True
@@ -135,7 +168,7 @@ class RAGService:
                 "rag_service_degraded_mode",
                 embedding_model_available=self.cohere_client is not None,
                 qdrant_available=self.qdrant_client is not None,
-                message="RAG service operating in degraded mode. Retrieval operations will return empty results."
+                message="RAG service operating in degraded mode. Retrieval operations will return empty results.",
             )
         else:
             logger.info("rag_service_initialized_successfully")
@@ -153,19 +186,18 @@ class RAGService:
             await self.qdrant_client.create_collection(
                 collection_name=self.collection_name,
                 vectors_config=VectorParams(
-                    size=self.embedding_dim,
-                    distance=Distance.COSINE
-                )
+                    size=self.embedding_dim, distance=Distance.COSINE
+                ),
             )
             logger.info("collection_created", name=self.collection_name)
 
     def _chunk_text(self, text: str) -> List[str]:
         """
         Split text into overlapping chunks.
-        
+
         Args:
             text: Text to chunk
-            
+
         Returns:
             List of text chunks
         """
@@ -192,12 +224,12 @@ class RAGService:
         if not self.cohere_client:
             logger.warning("cohere_client_unavailable_returning_empty")
             return [[] for _ in texts]
-            
+
         try:
             response = await self.cohere_client.embed(
                 texts=texts,
                 model=settings.EMBEDDING_MODEL,
-                input_type="search_document"
+                input_type="search_document",
             )
             return response.embeddings
         except Exception as e:
@@ -207,12 +239,10 @@ class RAGService:
     async def _embed_query(self, query: str) -> List[float]:
         if not self.cohere_client:
             return []
-            
+
         try:
             response = await self.cohere_client.embed(
-                texts=[query],
-                model=settings.EMBEDDING_MODEL,
-                input_type="search_query"
+                texts=[query], model=settings.EMBEDDING_MODEL, input_type="search_query"
             )
             return response.embeddings[0] if response.embeddings else []
         except Exception as e:
@@ -242,8 +272,7 @@ class RAGService:
         # Graceful degradation: skip indexing if Qdrant is unavailable
         if not self.qdrant_client:
             logger.warning(
-                "boilerplate_indexing_skipped_qdrant_unavailable",
-                repo_path=repo_path
+                "boilerplate_indexing_skipped_qdrant_unavailable", repo_path=repo_path
             )
             return 0
 
@@ -253,7 +282,7 @@ class RAGService:
         # Index HTML templates
         html_files = [
             os.path.join(repo_path, "index.html"),
-            os.path.join(repo_path, "frontend/index.html")
+            os.path.join(repo_path, "frontend/index.html"),
         ]
 
         for html_file in html_files:
@@ -263,7 +292,9 @@ class RAGService:
                         content = f.read()
                     text_chunks = self._chunk_text(content)
                     for idx, chunk in enumerate(text_chunks):
-                        chunk_id = self._generate_chunk_id("boilerplate_html", idx, chunk)
+                        chunk_id = self._generate_chunk_id(
+                            "boilerplate_html", idx, chunk
+                        )
                         chunks.append(
                             DocumentChunk(
                                 id=chunk_id,
@@ -273,18 +304,22 @@ class RAGService:
                                     "file": html_file,
                                     "type": "html_template",
                                     "chunk_index": idx,
-                                    "indexed_at": datetime.utcnow().isoformat()
-                                }
+                                    "indexed_at": datetime.utcnow().isoformat(),
+                                },
                             )
                         )
-                    logger.info("indexed_html_file", file=html_file, chunks=len(text_chunks))
+                    logger.info(
+                        "indexed_html_file", file=html_file, chunks=len(text_chunks)
+                    )
                 except Exception as e:
-                    logger.error("boilerplate_indexing_failed", file=html_file, error=str(e))
+                    logger.error(
+                        "boilerplate_indexing_failed", file=html_file, error=str(e)
+                    )
 
         # Index CSS patterns if exists
         css_files = [
             os.path.join(repo_path, "src/style.css"),
-            os.path.join(repo_path, "frontend/src/App.css")
+            os.path.join(repo_path, "frontend/src/App.css"),
         ]
 
         for css_file in css_files:
@@ -294,7 +329,9 @@ class RAGService:
                         content = f.read()
                     text_chunks = self._chunk_text(content)
                     for idx, chunk in enumerate(text_chunks):
-                        chunk_id = self._generate_chunk_id("boilerplate_css", idx, chunk)
+                        chunk_id = self._generate_chunk_id(
+                            "boilerplate_css", idx, chunk
+                        )
                         chunks.append(
                             DocumentChunk(
                                 id=chunk_id,
@@ -304,10 +341,14 @@ class RAGService:
                                     "file": css_file,
                                     "type": "css_patterns",
                                     "chunk_index": idx,
-                                    "indexed_at": datetime.utcnow().isoformat()
-                                }
+                                    "indexed_at": datetime.utcnow().isoformat(),
+                                },
                             )
                         )
+                except Exception as e:
+                    logger.error(
+                        "boilerplate_indexing_failed", file=css_file, error=str(e)
+                    )
 
         chunk_count = await self._add_chunks_to_qdrant(chunks)
         logger.info("boilerplate_indexed", chunk_count=chunk_count)
@@ -332,8 +373,7 @@ class RAGService:
         # Graceful degradation: skip indexing if Qdrant is unavailable
         if not self.qdrant_client:
             logger.warning(
-                "documentation_indexing_skipped_qdrant_unavailable",
-                doc_type=doc_type
+                "documentation_indexing_skipped_qdrant_unavailable", doc_type=doc_type
             )
             return 0
 
@@ -351,8 +391,8 @@ class RAGService:
                     metadata={
                         "type": doc_type,
                         "chunk_index": idx,
-                        "indexed_at": datetime.utcnow().isoformat()
-                    }
+                        "indexed_at": datetime.utcnow().isoformat(),
+                    },
                 )
             )
 
@@ -373,11 +413,16 @@ class RAGService:
             Number of chunks added (0 if Qdrant unavailable)
         """
         if not self.qdrant_client:
-            logger.warning("qdrant_unavailable_skipping_chunk_insertion", chunk_count=len(chunks))
+            logger.warning(
+                "qdrant_unavailable_skipping_chunk_insertion", chunk_count=len(chunks)
+            )
             return 0
 
         if not self.cohere_client:
-            logger.warning("cohere_client_unavailable_skipping_chunk_insertion", chunk_count=len(chunks))
+            logger.warning(
+                "cohere_client_unavailable_skipping_chunk_insertion",
+                chunk_count=len(chunks),
+            )
             return 0
 
         if not chunks:
@@ -392,7 +437,9 @@ class RAGService:
             points = []
             for chunk, embedding in zip(chunks, embeddings):
                 # Use hash of chunk ID to create a numeric ID
-                chunk_numeric_id = int(hashlib.md5(chunk.id.encode()).hexdigest(), 16) % (10 ** 8)
+                chunk_numeric_id = int(
+                    hashlib.md5(chunk.id.encode()).hexdigest(), 16
+                ) % (10**8)
                 points.append(
                     PointStruct(
                         id=chunk_numeric_id,
@@ -401,25 +448,77 @@ class RAGService:
                             "chunk_id": chunk.id,
                             "text": chunk.text,
                             "source": chunk.source,
-                            "metadata": chunk.metadata
-                        }
+                            "metadata": chunk.metadata,
+                        },
                     )
                 )
 
             # Upsert to Qdrant
             await self.qdrant_client.upsert(
-                collection_name=self.collection_name,
-                points=points
+                collection_name=self.collection_name, points=points
             )
+
+            texts = [chunk.text for chunk in chunks]
+            ids = [chunk.id for chunk in chunks]
+            self.bm25_index.add_documents(texts, ids)
 
             logger.info("chunks_added_to_qdrant", count=len(points))
             return len(points)
 
         except Exception as e:
-            logger.error("chunk_insertion_to_qdrant_failed", error=str(e), chunk_count=len(chunks))
+            logger.error(
+                "chunk_insertion_to_qdrant_failed",
+                error=str(e),
+                chunk_count=len(chunks),
+            )
             return 0
 
+    @staticmethod
+    def _reciprocal_rank_fusion(
+        dense_results: List[RetrievalResult],
+        sparse_results: List[Tuple[str, float]],
+        k: int = 60
+    ) -> List[RetrievalResult]:
+        """Merge dense and sparse results using RRF."""
+        scores: Dict[str, float] = {}
+        
+        # Build lookup from chunk_id -> RetrievalResult for dense
+        dense_map = {r.metadata.get("chunk_id", r.text[:50]): r for r in dense_results}
+        
+        for rank, result in enumerate(dense_results):
+            doc_id = result.metadata.get("chunk_id", result.text[:50])
+            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank + 1)
+        
+        for rank, (doc_id, _) in enumerate(sparse_results):
+            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank + 1)
+        
+        # Sort by RRF score
+        sorted_ids = sorted(scores, key=lambda x: scores[x], reverse=True)
+        
+        # Return RetrievalResults in RRF order, only those we have full data for
+        fused = []
+        for doc_id in sorted_ids:
+            if doc_id in dense_map:
+                result = dense_map[doc_id]
+                result.score = scores[doc_id]  # overwrite with RRF score
+                fused.append(result)
+        return fused
+
     async def retrieve_best_practices(self, query: str, source_filter: Optional[str] = None) -> List[RetrievalResult]:
+        # 1. Dense retrieval via Qdrant
+        dense_results = await self._dense_search(query, source_filter)
+        
+        # 2. Sparse retrieval via BM25
+        sparse_results = self.bm25_index.search(query, top_k=self.top_k * 2)
+        
+        # 3. Fuse via RRF
+        if dense_results and sparse_results:
+            return self._reciprocal_rank_fusion(dense_results, sparse_results)[:self.top_k]
+        return dense_results or []
+
+    async def _dense_search(
+        self, query: str, source_filter: Optional[str] = None
+    ) -> List[RetrievalResult]:
         """
         Retrieve best practice snippets based on user brief.
 
@@ -444,7 +543,7 @@ class RAGService:
                 "rag_degraded_skipping_retrieval",
                 query=query,
                 embedding_available=self.cohere_client is not None,
-                qdrant_available=self.qdrant_client is not None
+                qdrant_available=self.qdrant_client is not None,
             )
             return []
 
@@ -462,8 +561,7 @@ class RAGService:
                 query_filter = Filter(
                     must=[
                         FieldCondition(
-                            key="source",
-                            match=MatchValue(value=source_filter)
+                            key="source", match=MatchValue(value=source_filter)
                         )
                     ]
                 )
@@ -475,7 +573,7 @@ class RAGService:
                 query_filter=query_filter,
                 limit=self.top_k,
                 with_payload=True,
-                with_vectors=False
+                with_vectors=False,
             )
 
             # Convert to RetrievalResult
@@ -486,7 +584,7 @@ class RAGService:
                         text=scored_point.payload["text"],
                         source=scored_point.payload["source"],
                         score=scored_point.score,
-                        metadata=scored_point.payload.get("metadata", {})
+                        metadata=scored_point.payload.get("metadata", {}),
                     )
                 )
 
@@ -497,15 +595,12 @@ class RAGService:
             logger.warning(
                 "best_practices_retrieval_failed_returning_empty",
                 error=str(e),
-                query=query
+                query=query,
             )
             return []
 
     async def retrieve_relevant_code_chunks(
-        self,
-        instruction: str,
-        existing_code: str,
-        max_chars: int = 3000
+        self, instruction: str, existing_code: str, max_chars: int = 3000
     ) -> Tuple[List[RetrievalResult], str]:
         """
         Retrieve most relevant chunks of existing code for Round 2 "Surgical Updates".
@@ -538,33 +633,41 @@ class RAGService:
 
         # Extract the most relevant sections from existing code
         # This works regardless of RAG availability
-        relevant_code = self._extract_relevant_sections(existing_code, instruction, max_chars)
+        relevant_code = self._extract_relevant_sections(
+            existing_code, instruction, max_chars
+        )
 
-        logger.info("relevant_chunks_retrieved", result_count=len(results), code_chars=len(relevant_code))
+        logger.info(
+            "relevant_chunks_retrieved",
+            result_count=len(results),
+            code_chars=len(relevant_code),
+        )
         return results, relevant_code
 
-    def _extract_relevant_sections(self, code: str, instruction: str, max_chars: int) -> str:
+    def _extract_relevant_sections(
+        self, code: str, instruction: str, max_chars: int
+    ) -> str:
         """
         Extract relevant sections from code based on instruction.
-        
+
         Simple heuristic: prioritize sections that likely relate to the instruction.
         """
         # Split by common HTML/CSS sections
         sections = code.split("\n\n")
-        
+
         # Keywords from instruction
         keywords = instruction.lower().split()
-        
+
         # Score sections by keyword matches
         scored_sections = []
         for section in sections:
             score = sum(1 for kw in keywords if kw in section.lower())
             if score > 0:
                 scored_sections.append((score, section))
-        
+
         # Sort by score and concatenate until max_chars
         scored_sections.sort(reverse=True, key=lambda x: x[0])
-        
+
         result = []
         current_len = 0
         for score, section in scored_sections:
@@ -573,7 +676,7 @@ class RAGService:
                 current_len += len(section)
             else:
                 break
-        
+
         return "\n\n".join(result)
 
     async def clear_collection(self) -> None:
@@ -604,7 +707,9 @@ class RAGService:
         except Exception as e:
             logger.error("collection_clear_failed", error=str(e))
 
-    async def index_code_example(self, source_name: str, code: str, metadata: dict) -> int:
+    async def index_code_example(
+        self, source_name: str, code: str, metadata: dict
+    ) -> int:
         """
         Indexes code snippets (split by functions/classes) into a separate Qdrant collection "code_examples".
         """
@@ -622,13 +727,16 @@ class RAGService:
         except Exception:
             await self.qdrant_client.create_collection(
                 collection_name=collection_name,
-                vectors_config=VectorParams(size=self.embedding_dim, distance=Distance.COSINE)
+                vectors_config=VectorParams(
+                    size=self.embedding_dim, distance=Distance.COSINE
+                ),
             )
 
         # Chunk code by functions/classes
         chunks = []
         import re
-        splits = re.split(r'(?=\n(?:def|class)\s+)', "\n" + code)
+
+        splits = re.split(r"(?=\n(?:def|class)\s+)", "\n" + code)
         splits = [s.strip() for s in splits if s.strip()]
 
         for idx, split_code in enumerate(splits):
@@ -638,7 +746,7 @@ class RAGService:
                     id=chunk_id,
                     text=split_code,
                     source=source_name,
-                    metadata={"chunk_index": idx, **metadata}
+                    metadata={"chunk_index": idx, **metadata},
                 )
             )
 
@@ -653,7 +761,9 @@ class RAGService:
             for chunk, embedding in zip(chunks, embeddings):
                 if not embedding:
                     continue
-                chunk_numeric_id = int(hashlib.md5(chunk.id.encode()).hexdigest(), 16) % (10 ** 8)
+                chunk_numeric_id = int(
+                    hashlib.md5(chunk.id.encode()).hexdigest(), 16
+                ) % (10**8)
                 points.append(
                     PointStruct(
                         id=chunk_numeric_id,
@@ -662,13 +772,15 @@ class RAGService:
                             "chunk_id": chunk.id,
                             "text": chunk.text,
                             "source": chunk.source,
-                            "metadata": chunk.metadata
-                        }
+                            "metadata": chunk.metadata,
+                        },
                     )
                 )
 
             if points:
-                await self.qdrant_client.upsert(collection_name=collection_name, points=points)
+                await self.qdrant_client.upsert(
+                    collection_name=collection_name, points=points
+                )
             return len(points)
         except Exception as e:
             logger.error("index_code_example_failed", error=str(e))

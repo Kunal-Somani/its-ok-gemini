@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -e
+echo "🔍 Running pre-push checks..."
+
+echo "→ Python lint (ruff)"
+ruff check app/ tests/ --exit-zero-on-fix
+ruff format app/ tests/ --check
+
+echo "→ Python tests"
+pytest tests/unit/ -q --tb=short
+
+echo "→ Frontend TypeScript check"
+cd frontend && npx tsc --noEmit && cd ..
+
+echo "→ Frontend lint"
+cd frontend && npm run lint && cd ..
+
+echo "✅ All checks passed. Pushing..."

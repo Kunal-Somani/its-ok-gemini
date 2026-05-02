@@ -2,10 +2,12 @@ import json
 import asyncio
 from app.core.redis import publish_log
 
+
 class RedisLogPublisher:
     """
     Custom structlog processor that publishes logs to Redis pub/sub.
     """
+
     def __call__(self, logger, method_name, event_dict):
         try:
             # Serialize event_dict; use default=str for non-serializable objects (like UUIDs)
@@ -13,7 +15,7 @@ class RedisLogPublisher:
             channels = ["task:logs"]
             if "task_id" in event_dict:
                 channels.append(f"task:logs:{event_dict['task_id']}")
-                
+
             try:
                 loop = asyncio.get_running_loop()
                 for channel in channels:

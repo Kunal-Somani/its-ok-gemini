@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import { LayoutDashboard, ListTodo, Settings as SettingsIcon, Menu, X, Terminal } from 'lucide-react';
 import { format } from 'date-fns';

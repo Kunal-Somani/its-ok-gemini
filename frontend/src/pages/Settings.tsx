@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Save, Activity, Eye, EyeOff } from 'lucide-react';
 import { API_BASE } from '../config';
 

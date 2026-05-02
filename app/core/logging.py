@@ -4,6 +4,7 @@ import sys
 from app.core.config import settings
 from app.core.log_publisher import RedisLogPublisher
 
+
 def setup_logging():
     # Set the logging level based on the environment
     log_level = logging.INFO if settings.ENVIRONMENT == "production" else logging.DEBUG

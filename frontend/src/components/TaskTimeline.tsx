@@ -1,12 +1,14 @@
-import React from 'react';
 import clsx from 'clsx';
 import { Check } from 'lucide-react';
+import { TaskRecord } from '../api/client';
+import { format } from 'date-fns';
 
 interface TaskTimelineProps {
-  currentStatus: string;
+  task: TaskRecord;
 }
 
-export default function TaskTimeline({ currentStatus }: TaskTimelineProps) {
+export default function TaskTimeline({ task }: TaskTimelineProps) {
+  const currentStatus = task.status;
   const steps = ['QUEUED', 'ANALYZING', 'GENERATING', 'DEPLOYING', 'SUCCESS'];
   
   const isFailed = currentStatus === 'FAILED';
@@ -37,16 +39,35 @@ export default function TaskTimeline({ currentStatus }: TaskTimelineProps) {
           if (isCurrent && isEndState && currentStatus === 'FAILED') circleBg = 'bg-red-500 border-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]';
 
           return (
-            <div key={step} className="flex flex-col items-center gap-3 z-10 w-24">
+            <div key={step} className="flex flex-col items-center gap-3 z-10 w-24 relative group">
               <div className={clsx("w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors duration-300", circleBg)}>
                 {isCompleted || (isEndState && currentStatus === 'SUCCESS') ? <Check size={16} strokeWidth={3} /> : <span className="text-xs font-bold">{index + 1}</span>}
               </div>
-              <span className={clsx(
-                "text-[11px] font-mono tracking-wider uppercase text-center",
-                isCurrent ? (isFailed ? 'text-red-400 font-bold' : 'text-[#00ff9f] font-bold') : (isCompleted ? 'text-slate-300' : 'text-slate-600')
-              )}>
-                {step}
-              </span>
+              <div className="flex flex-col items-center">
+                <span className={clsx(
+                  "text-[11px] font-mono tracking-wider uppercase text-center",
+                  isCurrent ? (isFailed ? 'text-red-400 font-bold' : 'text-[#00ff9f] font-bold') : (isCompleted ? 'text-slate-300' : 'text-slate-600')
+                )}>
+                  {step}
+                </span>
+                {task.step_timestamps && task.step_timestamps[step] && (
+                  <span className="text-[10px] text-slate-500 mt-1 font-mono">{format(new Date(task.step_timestamps[step]), 'HH:mm:ss')}</span>
+                )}
+              </div>
+              
+              {/* Optional duration text above line */}
+              {isCompleted && task.step_durations && task.step_durations[step] && (
+                <div className="absolute -right-12 top-0 -translate-y-6 text-[10px] text-slate-400 font-mono">
+                  {task.step_durations[step]}
+                </div>
+              )}
+
+              {/* Error log inline */}
+              {isEndState && isFailed && task.error_log && step === 'FAILED' && (
+                <div className="absolute top-16 w-48 text-center text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 p-2 rounded max-h-24 overflow-hidden text-ellipsis">
+                  {task.error_log}
+                </div>
+              )}
             </div>
           );
         })}

@@ -14,6 +14,10 @@ export interface TaskRecord {
     duration_seconds?: number;
     created_at: string;
     error_log?: string;
+    celery_task_id?: string;
+    retry_count?: number;
+    step_timestamps?: Record<string, string>;
+    step_durations?: Record<string, string>;
 }
 
 export const getHeaders = () => {
@@ -37,6 +41,14 @@ export const getTask = async (id: string): Promise<TaskRecord> => {
         headers: getHeaders()
     });
     if (!response.ok) throw new Error('Failed to fetch task');
+    return response.json();
+};
+
+export const getTaskStatus = async (id: string): Promise<TaskRecord> => {
+    const response = await fetch(`${API_BASE}/api/v1/tasks/${id}`, {
+        headers: getHeaders()
+    });
+    if (!response.ok) throw new Error('Failed to fetch task status');
     return response.json();
 };
 

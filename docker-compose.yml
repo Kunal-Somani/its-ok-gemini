@@ -1,10 +1,17 @@
 version: '3.9'
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:15-alpine
     container_name: its-ok-gemini-postgres
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
@@ -14,22 +21,22 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     deploy:
       resources:
         limits:
           cpus: '1.0'
           memory: 1G
-    networks:
-      - its-ok-network
 
   redis:
     image: redis:7-alpine
     container_name: its-ok-gemini-redis
     restart: unless-stopped
+    logging: *default-logging
     command: redis-server --appendonly yes
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -37,21 +44,21 @@ services:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     deploy:
       resources:
         limits:
           cpus: '0.5'
           memory: 512M
-    networks:
-      - its-ok-network
 
   qdrant:
     image: qdrant/qdrant:latest
     container_name: its-ok-gemini-qdrant
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${QDRANT_PORT:-6333}:6333"
     environment:
@@ -59,22 +66,22 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     deploy:
       resources:
         limits:
           cpus: '1.0'
           memory: 2G
-    networks:
-      - its-ok-network
 
   prometheus:
     image: prom/prometheus:latest
     container_name: its-ok-gemini-prometheus
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
@@ -83,35 +90,45 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     deploy:
       resources:
         limits:
           cpus: '0.5'
           memory: 512M
-    networks:
-      - its-ok-network
 
   grafana:
     image: grafana/grafana:latest
     container_name: its-ok-gemini-grafana
     restart: unless-stopped
+    logging: *default-logging
     ports:
-      - "3001:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
-      - GF_USERS_ALLOW_SIGN_UP=false
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     deploy:
       resources:
         limits:
           cpus: '0.5'
           memory: 512M
-    networks:
-      - its-ok-network
 
   api:
     build:
@@ -119,21 +136,21 @@ services:
       dockerfile: Dockerfile
     container_name: its-ok-gemini-api
     restart: unless-stopped
-    ports:
-      - "${API_PORT:-8000}:8000"
+    logging: *default-logging
     environment:
-      - ENVIRONMENT=${ENVIRONMENT:-production}
-      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-its_ok_gemini}
-      - REDIS_URL=redis://redis:6379
-      - QDRANT_URL=http://qdrant:6333
-      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
-      - COHERE_API_KEY=${COHERE_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - API_KEY=${API_KEY:-}
-      - JWT_SECRET=${JWT_SECRET:-}
-      - GITHUB_USERNAME=${GITHUB_USERNAME:-}
-      - GITHUB_APP_ID=${GITHUB_APP_ID:-}
-      - GITHUB_PRIVATE_KEY_B64=${GITHUB_PRIVATE_KEY_B64:-}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-its_ok_gemini}
+      DATABASE_SYNC_URL: postgresql+psycopg2://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-its_ok_gemini}
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      COHERE_API_KEY: ${COHERE_API_KEY}
+      API_KEY: ${API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      GITHUB_USERNAME: ${GITHUB_USERNAME}
+      GITHUB_APP_ID: ${GITHUB_APP_ID}
+      GITHUB_PRIVATE_KEY_B64: ${GITHUB_PRIVATE_KEY_B64}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
     depends_on:
       postgres:
         condition: service_healthy
@@ -146,14 +163,12 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 30s
     deploy:
       resources:
         limits:
           cpus: '1.0'
           memory: 1G
-    networks:
-      - its-ok-network
 
   frontend:
     build:
@@ -161,19 +176,92 @@ services:
       dockerfile: Dockerfile
     container_name: its-ok-gemini-frontend
     restart: unless-stopped
-    ports:
-      - "80:80"
+    logging: *default-logging
     depends_on:
-      - api
-      - postgres
-      - redis
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     deploy:
       resources:
         limits:
           cpus: '0.5'
           memory: 512M
-    networks:
-      - its-ok-network
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: its-ok-gemini-caddy
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_certs:/etc/caddy/certs
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A app.core.celery_app worker --loglevel=info -Q generation --concurrency=2
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-its_ok_gemini}
+      DATABASE_SYNC_URL: postgresql+psycopg2://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-its_ok_gemini}
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      COHERE_API_KEY: ${COHERE_API_KEY}
+      API_KEY: ${API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      GITHUB_USERNAME: ${GITHUB_USERNAME}
+      GITHUB_APP_ID: ${GITHUB_APP_ID}
+      GITHUB_PRIVATE_KEY_B64: ${GITHUB_PRIVATE_KEY_B64}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  flower:
+    image: mher/flower:2.0
+    command: celery --broker=${REDIS_URL:-redis://redis:6379} flower --port=5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    restart: unless-stopped
+    logging: *default-logging
 
 volumes:
   postgres_data:
@@ -181,7 +269,5 @@ volumes:
   qdrant_data:
   prometheus_data:
   grafana_data:
-
-networks:
-  its-ok-network:
-    driver: bridge
+  caddy_data:
+  caddy_certs:

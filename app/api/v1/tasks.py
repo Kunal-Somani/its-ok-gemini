@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -9,19 +9,25 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.session import get_db
 from app.models.task import TaskRecord, TaskStatus
-from app.workers.orchestrator import orchestrator
-from app.core.config import settings
 from app.core.security import get_api_key, limiter
 
 router = APIRouter()
 
+
 class TaskCreate(BaseModel):
     task_name: str = Field(..., min_length=3, max_length=100)
-    email: str = Field(..., pattern=r"^\S+@\S+\.\S+$", description="User's email address")
+    email: str = Field(
+        ..., pattern=r"^\S+@\S+\.\S+$", description="User's email address"
+    )
     round_index: int = Field(default=1, ge=1)
-    nonce: str = Field(..., min_length=5, description="Idempotency key to prevent duplicate submissions")
+    nonce: str = Field(
+        ...,
+        min_length=5,
+        description="Idempotency key to prevent duplicate submissions",
+    )
     instruction: str = Field(..., min_length=5)
     attachments: Optional[List[Dict[str, Any]]] = None
+
 
 class TaskResponse(BaseModel):
     id: uuid.UUID
@@ -38,14 +44,16 @@ class TaskResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-@router.post("/tasks/ready", response_model=TaskResponse, status_code=201, tags=["tasks"])
+
+@router.post(
+    "/tasks/ready", response_model=TaskResponse, status_code=201, tags=["tasks"]
+)
 @limiter.limit("10/minute")
 async def create_task(
     request: Request,
     task_in: TaskCreate,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key)
+    api_key: str = Depends(get_api_key),
 ):
     """
     Create a new autonomous task.
@@ -65,7 +73,7 @@ async def create_task(
         email=task_in.email,
         round_index=task_in.round_index,
         nonce=task_in.nonce,
-        status=TaskStatus.QUEUED
+        status=TaskStatus.QUEUED,
     )
     db.add(new_task)
     try:
@@ -73,17 +81,16 @@ async def create_task(
         await db.refresh(new_task)
     except IntegrityError:
         await db.rollback()
-        raise HTTPException(status_code=409, detail="Task with this nonce already exists")
+        raise HTTPException(
+            status_code=409, detail="Task with this nonce already exists"
+        )
 
-    # 3. Offload to Background Task
-    background_tasks.add_task(
-        orchestrator.process_task,
-        task_id=new_task.id,
-        instruction=task_in.instruction,
-        attachments=task_in.attachments
-    )
+    # 3. Offload to Celery Task
+    from app.tasks.generation_task import run_generation
+    run_generation.delay(str(new_task.id), task_in.instruction, task_in.attachments)
 
     return new_task
+
 
 @router.get("/tasks", response_model=List[TaskResponse], tags=["tasks"])
 async def get_tasks(
@@ -93,7 +100,7 @@ async def get_tasks(
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key)
+    api_key: str = Depends(get_api_key),
 ):
     """Retrieve historical tasks with pagination and status filtering."""
     stmt = select(TaskRecord).order_by(TaskRecord.created_at.desc())
@@ -101,23 +108,24 @@ async def get_tasks(
         stmt = stmt.where(TaskRecord.status == status)
     if task_name_contains:
         stmt = stmt.where(TaskRecord.task_name.ilike(f"%{task_name_contains}%"))
-        
+
     if after_id:
         cursor_task = await db.get(TaskRecord, after_id)
         if cursor_task:
             stmt = stmt.where(TaskRecord.created_at < cursor_task.created_at)
     else:
         stmt = stmt.offset(offset)
-        
+
     stmt = stmt.limit(limit)
     result = await db.execute(stmt)
     return result.scalars().all()
+
 
 @router.get("/tasks/{task_id}", response_model=TaskResponse, tags=["tasks"])
 async def get_task(
     task_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key)
+    api_key: str = Depends(get_api_key),
 ):
     """Retrieve details for a specific task by ID."""
     task = await db.get(TaskRecord, task_id)
@@ -125,17 +133,18 @@ async def get_task(
         raise HTTPException(status_code=404, detail="Task not found")
     return task
 
+
 @router.delete("/tasks/{task_id}", status_code=204, tags=["tasks"])
 async def delete_task(
     task_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(get_api_key)
+    api_key: str = Depends(get_api_key),
 ):
     """Cancel an ongoing task or mark it as FAILED."""
     task = await db.get(TaskRecord, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-        
+
     if task.status not in (TaskStatus.SUCCESS, TaskStatus.FAILED):
         task.status = TaskStatus.FAILED
         task.error_log = "Cancelled by user"

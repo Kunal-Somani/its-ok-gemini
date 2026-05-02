@@ -16,9 +16,9 @@
 ## 🐳 VPS (Ubuntu + Docker Compose)
 1. SSH into your VPS.
 2. Clone the repository and configure `.env` (ensure `ENVIRONMENT=production`).
-3. Run `docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`.
+3. Run `docker compose up -d --build` for all environments.
 4. Run migrations: `docker-compose exec api alembic upgrade head`.
 
 ## 🌐 Custom Domain & SSL
-Using the included `docker-compose.prod.yml`, Traefik automatically grabs SSL certificates via Let's Encrypt.
-Just ensure your domain's A-record points to the VPS IP, and set your Traefik labels appropriately.
+Using the included `docker-compose.yml`, Caddy automatically grabs SSL certificates via Let's Encrypt.
+Just ensure your domain's A-record points to the VPS IP and set the `DOMAIN` variable appropriately in `.env`.

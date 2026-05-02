@@ -1,4 +1,3 @@
-import React from 'react';
 import { Book, Code, Key, Terminal } from 'lucide-react';
 
 export function Docs() {
