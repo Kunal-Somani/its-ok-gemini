@@ -65,12 +65,6 @@ services:
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
     volumes:
       - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
     deploy:
       resources:
         limits:
@@ -161,7 +155,7 @@ services:
       redis:
         condition: service_healthy
       qdrant:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -186,12 +180,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
     deploy:
       resources:
         limits:
@@ -214,7 +202,7 @@ services:
       api:
         condition: service_healthy
       frontend:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "caddy", "version"]
       interval: 30s

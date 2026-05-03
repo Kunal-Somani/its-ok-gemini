@@ -1,3 +1,4 @@
+import os
 import asyncio
 from logging.config import fileConfig
 
@@ -11,6 +12,10 @@ from app.core.config import settings
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+config.set_main_option(
+    "sqlalchemy.url", 
+    os.environ.get("DATABASE_URL", str(settings.DATABASE_URL))
+)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -19,8 +24,6 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
 from app.models.base import Base
 
 target_metadata = Base.metadata
@@ -43,7 +46,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = settings.DATABASE_SYNC_URL
+    url = str(settings.DATABASE_URL)
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -67,9 +70,9 @@ async def run_async_migrations() -> None:
     and associate a connection with the context.
 
     """
-
+    # FIX: Explicitly use the ASYNC database URL here
     config_dict = {
-        "sqlalchemy.url": settings.DATABASE_SYNC_URL,
+        "sqlalchemy.url": str(settings.DATABASE_URL),
     }
 
     connectable = async_engine_from_config(

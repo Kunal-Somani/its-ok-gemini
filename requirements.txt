@@ -3,6 +3,7 @@ slowapi>=0.1.9
 uvicorn[standard]
 sqlalchemy[asyncio]
 asyncpg
+psycopg2-binary
 alembic
 redis[asyncio]>=5.0.0
 httpx
@@ -11,6 +12,7 @@ GitPython
 structlog
 opentelemetry-api
 opentelemetry-sdk
+opentelemetry-exporter-otlp
 prometheus-client
 pydantic-settings
 tenacity
@@ -22,7 +24,7 @@ huggingface-hub>=0.24.0
 
 # RAG & Vector Embeddings
 cohere>=5.0.0
-qdrant-client>=2.7.0
+qdrant-client>=1.9.0
 
 # Task Queue
 celery[redis]>=5.3.0
